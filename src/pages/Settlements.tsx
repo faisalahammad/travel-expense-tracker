@@ -1,3 +1,5 @@
+import { AccountBalance as BalanceIcon, CurrencyExchange as CurrencyIcon, FileDownload as ExportIcon, Person as PersonIcon, Receipt as ReceiptIcon, SwapHoriz as TransactionIcon } from "@mui/icons-material";
+import { Alert, Box, Button, Chip, Divider, Grid, List, ListItem, ListItemText, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography } from "@mui/material";
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../context/AppContext";
@@ -29,136 +31,211 @@ const Settlements: React.FC = () => {
   };
 
   return (
-    <div>
-      <h1 className="text-3xl font-bold mb-6">Settlements</h1>
-      <h2 className="text-xl mb-4">Tour: {activeTour.name}</h2>
+    <>
+      <Typography variant="h4" component="h1" gutterBottom>
+        Settlements
+      </Typography>
+      <Typography variant="h6" component="h2" gutterBottom color="text.secondary">
+        Tour: {activeTour.name}
+      </Typography>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-        <div className="card">
-          <h3 className="text-lg font-bold mb-4">Tour Summary</h3>
-          <div className="space-y-2">
-            <div className="flex justify-between">
-              <span className="text-gray-600">Base Currency:</span>
-              <span className="font-medium">{activeTour.baseCurrencyCode}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600">Travelers:</span>
-              <span className="font-medium">{activeTour.travelers.length}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600">Currencies:</span>
-              <span className="font-medium">{activeTour.currencies.length}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600">Expenses:</span>
-              <span className="font-medium">{activeTour.expenses.length}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600">Total Transactions:</span>
-              <span className="font-medium">{settlements.length}</span>
-            </div>
-          </div>
-          <div className="mt-4">
-            <button onClick={handleExportToExcel} className="btn btn-primary">
-              Export to Excel
-            </button>
-          </div>
-        </div>
+      <Grid container spacing={3} sx={{ mb: 4 }}>
+        <Grid item xs={12} md={6}>
+          <Paper elevation={2} sx={{ p: 3, height: "100%" }}>
+            <Typography variant="h5" component="h3" gutterBottom>
+              Tour Summary
+            </Typography>
+            <Divider sx={{ mb: 3 }} />
+            <List disablePadding>
+              <ListItem sx={{ py: 1 }}>
+                <ListItemText
+                  primary={
+                    <Box sx={{ display: "flex", alignItems: "center" }}>
+                      <BalanceIcon sx={{ mr: 1, color: "primary.main" }} fontSize="small" />
+                      <Typography variant="body1" color="text.secondary">
+                        Base Currency
+                      </Typography>
+                    </Box>
+                  }
+                />
+                <Chip label={activeTour.baseCurrencyCode} color="primary" />
+              </ListItem>
+              <ListItem sx={{ py: 1 }}>
+                <ListItemText
+                  primary={
+                    <Box sx={{ display: "flex", alignItems: "center" }}>
+                      <PersonIcon sx={{ mr: 1, color: "primary.main" }} fontSize="small" />
+                      <Typography variant="body1" color="text.secondary">
+                        Travelers
+                      </Typography>
+                    </Box>
+                  }
+                />
+                <Typography variant="body1" fontWeight="medium">
+                  {activeTour.travelers.length}
+                </Typography>
+              </ListItem>
+              <ListItem sx={{ py: 1 }}>
+                <ListItemText
+                  primary={
+                    <Box sx={{ display: "flex", alignItems: "center" }}>
+                      <CurrencyIcon sx={{ mr: 1, color: "primary.main" }} fontSize="small" />
+                      <Typography variant="body1" color="text.secondary">
+                        Currencies
+                      </Typography>
+                    </Box>
+                  }
+                />
+                <Typography variant="body1" fontWeight="medium">
+                  {activeTour.currencies.length}
+                </Typography>
+              </ListItem>
+              <ListItem sx={{ py: 1 }}>
+                <ListItemText
+                  primary={
+                    <Box sx={{ display: "flex", alignItems: "center" }}>
+                      <ReceiptIcon sx={{ mr: 1, color: "primary.main" }} fontSize="small" />
+                      <Typography variant="body1" color="text.secondary">
+                        Expenses
+                      </Typography>
+                    </Box>
+                  }
+                />
+                <Typography variant="body1" fontWeight="medium">
+                  {activeTour.expenses.length}
+                </Typography>
+              </ListItem>
+              <ListItem sx={{ py: 1 }}>
+                <ListItemText
+                  primary={
+                    <Box sx={{ display: "flex", alignItems: "center" }}>
+                      <TransactionIcon sx={{ mr: 1, color: "primary.main" }} fontSize="small" />
+                      <Typography variant="body1" color="text.secondary">
+                        Total Transactions
+                      </Typography>
+                    </Box>
+                  }
+                />
+                <Typography variant="body1" fontWeight="medium">
+                  {settlements.length}
+                </Typography>
+              </ListItem>
+            </List>
+            <Box sx={{ mt: 3 }}>
+              <Button variant="contained" color="primary" startIcon={<ExportIcon />} onClick={handleExportToExcel}>
+                Export to Excel
+              </Button>
+            </Box>
+          </Paper>
+        </Grid>
 
-        <div className="card">
-          <h3 className="text-lg font-bold mb-4">Expense Totals by Traveler</h3>
-          {activeTour.travelers.length === 0 ? (
-            <p className="text-gray-500">No travelers added yet.</p>
-          ) : (
-            <div className="space-y-2">
-              {activeTour.travelers.map((traveler) => {
-                // Calculate total paid by this traveler
-                const totalPaid = activeTour.expenses
-                  .filter((expense) => expense.paidById === traveler.id)
-                  .reduce((sum, expense) => {
+        <Grid item xs={12} md={6}>
+          <Paper elevation={2} sx={{ p: 3, height: "100%" }}>
+            <Typography variant="h5" component="h3" gutterBottom>
+              Expense Totals by Traveler
+            </Typography>
+            <Divider sx={{ mb: 3 }} />
+            {activeTour.travelers.length === 0 ? (
+              <Alert severity="info">No travelers added yet.</Alert>
+            ) : (
+              <List disablePadding>
+                {activeTour.travelers.map((traveler) => {
+                  // Calculate total paid by this traveler
+                  const totalPaid = activeTour.expenses
+                    .filter((expense) => expense.paidById === traveler.id)
+                    .reduce((sum, expense) => {
+                      // Convert to base currency if needed
+                      if (expense.currencyCode !== activeTour.baseCurrencyCode) {
+                        const currency = activeTour.currencies.find((c) => c.code === expense.currencyCode);
+                        if (currency) {
+                          return sum + expense.amount / currency.exchangeRate;
+                        }
+                      }
+                      return sum + expense.amount;
+                    }, 0);
+
+                  // Calculate total owed by this traveler
+                  const totalOwed = activeTour.expenses.reduce((sum, expense) => {
+                    const split = expense.splits.find((s) => s.travelerId === traveler.id);
+
+                    if (!split) return sum;
+
                     // Convert to base currency if needed
                     if (expense.currencyCode !== activeTour.baseCurrencyCode) {
                       const currency = activeTour.currencies.find((c) => c.code === expense.currencyCode);
                       if (currency) {
-                        return sum + expense.amount / currency.exchangeRate;
+                        return sum + ((split.percentage / 100) * expense.amount) / currency.exchangeRate;
                       }
                     }
-                    return sum + expense.amount;
+
+                    return sum + (split.percentage / 100) * expense.amount;
                   }, 0);
 
-                // Calculate total owed by this traveler
-                const totalOwed = activeTour.expenses.reduce((sum, expense) => {
-                  const split = expense.splits.find((s) => s.travelerId === traveler.id);
+                  const balance = totalPaid - totalOwed;
 
-                  if (!split) return sum;
+                  return (
+                    <ListItem
+                      key={traveler.id}
+                      sx={{
+                        py: 1.5,
+                        px: 2,
+                        mb: 1,
+                        borderRadius: 1,
+                        bgcolor: balance > 0 ? "success.light" : balance < 0 ? "error.light" : "transparent",
+                      }}
+                    >
+                      <ListItemText primary={traveler.name} primaryTypographyProps={{ fontWeight: "medium" }} />
+                      <Box sx={{ textAlign: "right" }}>
+                        <Typography variant="body1" fontWeight="medium" color={balance > 0 ? "success.main" : balance < 0 ? "error.main" : "text.primary"}>
+                          {formatCurrency(balance, activeTour.baseCurrencyCode)}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          Paid: {formatCurrency(totalPaid, activeTour.baseCurrencyCode)}, Owed: {formatCurrency(totalOwed, activeTour.baseCurrencyCode)}
+                        </Typography>
+                      </Box>
+                    </ListItem>
+                  );
+                })}
+              </List>
+            )}
+          </Paper>
+        </Grid>
+      </Grid>
 
-                  // Convert to base currency if needed
-                  if (expense.currencyCode !== activeTour.baseCurrencyCode) {
-                    const currency = activeTour.currencies.find((c) => c.code === expense.currencyCode);
-                    if (currency) {
-                      return sum + ((split.percentage / 100) * expense.amount) / currency.exchangeRate;
-                    }
-                  }
-
-                  return sum + (split.percentage / 100) * expense.amount;
-                }, 0);
-
-                const balance = totalPaid - totalOwed;
-
-                return (
-                  <div
-                    key={traveler.id}
-                    className="flex justify-between items-center p-2 rounded-md"
-                    style={{
-                      backgroundColor: balance > 0 ? "rgba(52, 211, 153, 0.1)" : balance < 0 ? "rgba(239, 68, 68, 0.1)" : "transparent",
-                    }}
-                  >
-                    <span className="font-medium">{traveler.name}</span>
-                    <div className="text-right">
-                      <div className={balance > 0 ? "text-green-600" : balance < 0 ? "text-red-600" : ""}>{formatCurrency(balance, activeTour.baseCurrencyCode)}</div>
-                      <div className="text-xs text-gray-500">
-                        Paid: {formatCurrency(totalPaid, activeTour.baseCurrencyCode)}, Owed: {formatCurrency(totalOwed, activeTour.baseCurrencyCode)}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="card">
-        <h3 className="text-lg font-bold mb-4">Settlement Plan</h3>
+      <Paper elevation={2} sx={{ p: 3 }}>
+        <Typography variant="h5" component="h3" gutterBottom>
+          Settlement Plan
+        </Typography>
+        <Divider sx={{ mb: 3 }} />
 
         {activeTour.expenses.length === 0 ? (
-          <p className="text-gray-500">No expenses added yet. Add expenses to generate a settlement plan.</p>
+          <Alert severity="info">No expenses added yet. Add expenses to generate a settlement plan.</Alert>
         ) : settlements.length === 0 ? (
-          <p className="text-gray-500">No settlements needed. All expenses are already balanced.</p>
+          <Alert severity="success">No settlements needed. All expenses are already balanced.</Alert>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full bg-white">
-              <thead>
-                <tr className="bg-gray-100 text-gray-700">
-                  <th className="py-2 px-4 text-left">From</th>
-                  <th className="py-2 px-4 text-left">To</th>
-                  <th className="py-2 px-4 text-left">Amount</th>
-                </tr>
-              </thead>
-              <tbody>
+          <TableContainer>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>From</TableCell>
+                  <TableCell>To</TableCell>
+                  <TableCell>Amount</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
                 {settlements.map((settlement, index) => (
-                  <tr key={index} className="border-t border-gray-200">
-                    <td className="py-2 px-4">{getTravelerName(settlement.fromTravelerId, activeTour.travelers)}</td>
-                    <td className="py-2 px-4">{getTravelerName(settlement.toTravelerId, activeTour.travelers)}</td>
-                    <td className="py-2 px-4">{formatCurrency(settlement.amount, settlement.currencyCode)}</td>
-                  </tr>
+                  <TableRow key={index}>
+                    <TableCell>{getTravelerName(settlement.fromTravelerId, activeTour.travelers)}</TableCell>
+                    <TableCell>{getTravelerName(settlement.toTravelerId, activeTour.travelers)}</TableCell>
+                    <TableCell>{formatCurrency(settlement.amount, settlement.currencyCode)}</TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
-          </div>
+              </TableBody>
+            </Table>
+          </TableContainer>
         )}
-      </div>
-    </div>
+      </Paper>
+    </>
   );
 };
 

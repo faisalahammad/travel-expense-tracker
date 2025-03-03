@@ -2,7 +2,6 @@ import { Check as CheckIcon, Close as CloseIcon, CurrencyExchange as CurrencyIco
 import { Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Divider, Grid, IconButton, Paper, Snackbar, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography } from "@mui/material";
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import Layout from "../components/Layout";
 import { useApp } from "../context/AppContext";
 
 const Currencies: React.FC = () => {
@@ -119,7 +118,7 @@ const Currencies: React.FC = () => {
   };
 
   return (
-    <Layout>
+    <>
       <Typography variant="h4" component="h1" gutterBottom>
         Manage Currencies
       </Typography>
@@ -247,7 +246,7 @@ const Currencies: React.FC = () => {
 
       {/* Alert Snackbar */}
       <Snackbar open={snackbarOpen} autoHideDuration={4000} onClose={handleCloseSnackbar} message={alertMessage} />
-    </Layout>
+    </>
   );
 };
 

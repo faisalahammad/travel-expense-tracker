@@ -2,7 +2,6 @@ import { Add as AddIcon, Check as CheckIcon, Close as CloseIcon, Delete as Delet
 import { Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Divider, Grid, IconButton, Paper, Snackbar, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography } from "@mui/material";
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import Layout from "../components/Layout";
 import { useApp } from "../context/AppContext";
 import { generateShareableLink } from "../utils";
 
@@ -86,7 +85,7 @@ const Tours: React.FC = () => {
   };
 
   return (
-    <Layout>
+    <>
       <Typography variant="h4" component="h1" gutterBottom>
         Manage Tours
       </Typography>
@@ -137,7 +136,24 @@ const Tours: React.FC = () => {
               <TableBody>
                 {tours.map((tour) => (
                   <TableRow key={tour.id}>
-                    <TableCell>{editingTourId === tour.id ? <TextField size="small" value={editTourName} onChange={(e) => setEditTourName(e.target.value)} autoFocus variant="outlined" /> : tour.name}</TableCell>
+                    <TableCell>
+                      {editingTourId === tour.id ? (
+                        <TextField size="small" value={editTourName} onChange={(e) => setEditTourName(e.target.value)} autoFocus variant="outlined" />
+                      ) : (
+                        <Typography
+                          sx={{
+                            cursor: "pointer",
+                            "&:hover": {
+                              textDecoration: "underline",
+                              color: "primary.main",
+                            },
+                          }}
+                          onClick={() => handleEditTour(tour.id)}
+                        >
+                          {tour.name}
+                        </Typography>
+                      )}
+                    </TableCell>
                     <TableCell>{tour.baseCurrencyCode}</TableCell>
                     <TableCell>{tour.travelers.length}</TableCell>
                     <TableCell>{tour.expenses.length}</TableCell>
@@ -195,7 +211,7 @@ const Tours: React.FC = () => {
 
       {/* Snackbar for copy notification */}
       <Snackbar open={snackbarOpen} autoHideDuration={3000} onClose={handleCloseSnackbar} message="Shareable link copied to clipboard!" />
-    </Layout>
+    </>
   );
 };
 

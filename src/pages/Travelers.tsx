@@ -2,7 +2,6 @@ import { Check as CheckIcon, Close as CloseIcon, Delete as DeleteIcon, Edit as E
 import { Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Divider, Grid, IconButton, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography } from "@mui/material";
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import Layout from "../components/Layout";
 import { useApp } from "../context/AppContext";
 
 const Travelers: React.FC = () => {
@@ -77,7 +76,7 @@ const Travelers: React.FC = () => {
   };
 
   return (
-    <Layout>
+    <>
       <Typography variant="h4" component="h1" gutterBottom>
         Manage Travelers
       </Typography>
@@ -169,7 +168,7 @@ const Travelers: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
-    </Layout>
+    </>
   );
 };
 

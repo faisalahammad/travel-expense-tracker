@@ -1,3 +1,37 @@
+import { Add as AddIcon, DateRange as DateIcon, Delete as DeleteIcon, Description as DescriptionIcon, ExpandLess as ExpandLessIcon, ExpandMore as ExpandMoreIcon, AttachMoney as MoneyIcon, Person as PersonIcon } from "@mui/icons-material";
+import {
+  Alert,
+  Box,
+  Button,
+  Card,
+  CardActions,
+  CardContent,
+  Collapse,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle,
+  Divider,
+  FormControl,
+  Grid,
+  IconButton,
+  InputAdornment,
+  InputLabel,
+  MenuItem,
+  Paper,
+  Select,
+  Slider,
+  Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  TextField,
+  Typography,
+} from "@mui/material";
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../context/AppContext";
@@ -10,6 +44,8 @@ const Expenses: React.FC = () => {
   const navigate = useNavigate();
 
   const [expandedExpenseId, setExpandedExpenseId] = useState<string | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [expenseToDelete, setExpenseToDelete] = useState<string | null>(null);
 
   // Form state for new expense
   const [newExpenseDate, setNewExpenseDate] = useState(new Date().toISOString().split("T")[0]);
@@ -122,9 +158,21 @@ const Expenses: React.FC = () => {
     setSplitEqually(true);
   };
 
-  const handleRemoveExpense = (expenseId: string) => {
-    if (window.confirm("Are you sure you want to remove this expense?")) {
-      removeExpense(activeTourId, expenseId);
+  const handleOpenDeleteDialog = (expenseId: string) => {
+    setExpenseToDelete(expenseId);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleCloseDeleteDialog = () => {
+    setDeleteDialogOpen(false);
+    setExpenseToDelete(null);
+  };
+
+  const handleConfirmDelete = () => {
+    if (expenseToDelete) {
+      removeExpense(activeTourId, expenseToDelete);
+      setDeleteDialogOpen(false);
+      setExpenseToDelete(null);
     }
   };
 
@@ -133,108 +181,189 @@ const Expenses: React.FC = () => {
   };
 
   return (
-    <div>
-      <h1 className="text-3xl font-bold mb-6">Manage Expenses</h1>
-      <h2 className="text-xl mb-4">Tour: {activeTour.name}</h2>
+    <>
+      <Typography variant="h4" component="h1" gutterBottom>
+        Manage Expenses
+      </Typography>
+      <Typography variant="h6" component="h2" gutterBottom color="text.secondary">
+        Tour: {activeTour.name}
+      </Typography>
 
       {activeTour.travelers.length === 0 ? (
-        <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mb-6">
-          <p>You need to add travelers before you can add expenses.</p>
-          <button onClick={() => navigate("/travelers")} className="mt-2 text-blue-600 hover:underline">
-            Add Travelers
-          </button>
-        </div>
+        <Alert
+          severity="warning"
+          sx={{ mb: 4 }}
+          action={
+            <Button color="inherit" size="small" onClick={() => navigate("/travelers")}>
+              Add Travelers
+            </Button>
+          }
+        >
+          You need to add travelers before you can add expenses.
+        </Alert>
       ) : (
-        <div className="card mb-6">
-          <h3 className="text-lg font-bold mb-4">Add New Expense</h3>
+        <Paper elevation={2} sx={{ p: 3, mb: 4 }}>
+          <Typography variant="h5" component="h3" gutterBottom>
+            Add New Expense
+          </Typography>
+          <Divider sx={{ mb: 3 }} />
           <form onSubmit={handleAddExpense}>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-              <div>
-                <label htmlFor="expenseDate" className="block text-gray-700 mb-2">
-                  Date
-                </label>
-                <input type="date" id="expenseDate" className="input" value={newExpenseDate} onChange={(e) => setNewExpenseDate(e.target.value)} required />
-              </div>
-              <div>
-                <label htmlFor="expenseDescription" className="block text-gray-700 mb-2">
-                  Description
-                </label>
-                <input type="text" id="expenseDescription" className="input" placeholder="e.g., Dinner at Restaurant" value={newExpenseDescription} onChange={(e) => setNewExpenseDescription(e.target.value)} required />
-              </div>
-              <div>
-                <label htmlFor="expenseAmount" className="block text-gray-700 mb-2">
-                  Amount
-                </label>
-                <input type="number" id="expenseAmount" className="input" placeholder="e.g., 50.00" value={newExpenseAmount} onChange={(e) => setNewExpenseAmount(e.target.value)} min="0.01" step="0.01" required />
-              </div>
-              <div>
-                <label htmlFor="expenseCurrency" className="block text-gray-700 mb-2">
-                  Currency
-                </label>
-                <select id="expenseCurrency" className="select" value={newExpenseCurrency} onChange={(e) => setNewExpenseCurrency(e.target.value)} required>
-                  {activeTour.currencies.map((currency) => (
-                    <option key={currency.code} value={currency.code}>
-                      {currency.code} - {currency.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label htmlFor="expensePaidBy" className="block text-gray-700 mb-2">
-                  Paid By
-                </label>
-                <select id="expensePaidBy" className="select" value={newExpensePaidBy} onChange={(e) => setNewExpensePaidBy(e.target.value)} required>
-                  {activeTour.travelers.map((traveler) => (
-                    <option key={traveler.id} value={traveler.id}>
-                      {traveler.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
+            <Grid container spacing={3}>
+              <Grid item xs={12} sm={6} md={3}>
+                <TextField
+                  fullWidth
+                  id="expenseDate"
+                  label="Date"
+                  type="date"
+                  value={newExpenseDate}
+                  onChange={(e) => setNewExpenseDate(e.target.value)}
+                  required
+                  InputLabelProps={{ shrink: true }}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <DateIcon color="action" />
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6} md={3}>
+                <TextField
+                  fullWidth
+                  id="expenseDescription"
+                  label="Description"
+                  placeholder="e.g., Dinner at Restaurant"
+                  value={newExpenseDescription}
+                  onChange={(e) => setNewExpenseDescription(e.target.value)}
+                  required
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <DescriptionIcon color="action" />
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6} md={3}>
+                <TextField
+                  fullWidth
+                  id="expenseAmount"
+                  label="Amount"
+                  type="number"
+                  placeholder="e.g., 50.00"
+                  value={newExpenseAmount}
+                  onChange={(e) => setNewExpenseAmount(e.target.value)}
+                  inputProps={{ min: "0.01", step: "0.01" }}
+                  required
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <MoneyIcon color="action" />
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6} md={3}>
+                <FormControl fullWidth required>
+                  <InputLabel id="currency-label">Currency</InputLabel>
+                  <Select labelId="currency-label" id="expenseCurrency" value={newExpenseCurrency} onChange={(e) => setNewExpenseCurrency(e.target.value)} label="Currency">
+                    {activeTour.currencies.map((currency) => (
+                      <MenuItem key={currency.code} value={currency.code}>
+                        {currency.code} - {currency.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12} sm={6} md={3}>
+                <FormControl fullWidth required>
+                  <InputLabel id="paidby-label">Paid By</InputLabel>
+                  <Select
+                    labelId="paidby-label"
+                    id="expensePaidBy"
+                    value={newExpensePaidBy}
+                    onChange={(e) => setNewExpensePaidBy(e.target.value)}
+                    label="Paid By"
+                    startAdornment={
+                      <InputAdornment position="start">
+                        <PersonIcon color="action" />
+                      </InputAdornment>
+                    }
+                  >
+                    {activeTour.travelers.map((traveler) => (
+                      <MenuItem key={traveler.id} value={traveler.id}>
+                        {traveler.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+            </Grid>
 
-            <div className="mb-4">
-              <div className="flex justify-between items-center mb-2">
-                <label className="block text-gray-700 font-bold">Split</label>
-                <button type="button" onClick={handleSplitEqually} className="text-blue-600 hover:underline text-sm">
+            <Box sx={{ mt: 4, mb: 3 }}>
+              <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
+                <Typography variant="subtitle1" fontWeight="bold">
+                  Split
+                </Typography>
+                <Button size="small" onClick={handleSplitEqually} color="primary" variant={splitEqually ? "contained" : "outlined"}>
                   Split Equally
-                </button>
-              </div>
+                </Button>
+              </Box>
 
-              <div className="bg-gray-50 p-4 rounded-md">
-                {newExpenseSplits.map((split, index) => {
+              <Paper sx={{ p: 3, bgcolor: "background.default" }}>
+                {newExpenseSplits.map((split) => {
                   const traveler = activeTour.travelers.find((t) => t.id === split.travelerId);
 
                   if (!traveler) return null;
 
                   return (
-                    <div key={traveler.id} className="flex items-center mb-2 last:mb-0">
-                      <div className="w-1/3">{traveler.name}</div>
-                      <div className="w-2/3 flex items-center">
-                        <input type="range" min="0" max="100" value={split.percentage} onChange={(e) => handleSplitPercentageChange(traveler.id, parseFloat(e.target.value))} className="w-2/3 mr-2" />
-                        <input type="number" value={split.percentage} onChange={(e) => handleSplitPercentageChange(traveler.id, parseFloat(e.target.value))} className="w-1/3 input" min="0" max="100" step="0.01" />
-                        <span className="ml-2">%</span>
-                      </div>
-                    </div>
+                    <Box key={traveler.id} sx={{ mb: 2, display: "flex", alignItems: "center" }}>
+                      <Typography sx={{ width: "30%", flexShrink: 0 }}>{traveler.name}</Typography>
+                      <Box sx={{ width: "70%", display: "flex", alignItems: "center" }}>
+                        <Slider value={split.percentage} onChange={(_, value) => handleSplitPercentageChange(traveler.id, value as number)} min={0} max={100} step={0.01} sx={{ mr: 2, flexGrow: 1 }} />
+                        <TextField
+                          value={split.percentage}
+                          onChange={(e) => {
+                            const value = parseFloat(e.target.value);
+                            if (!isNaN(value)) {
+                              handleSplitPercentageChange(traveler.id, value);
+                            }
+                          }}
+                          type="number"
+                          size="small"
+                          inputProps={{ min: 0, max: 100, step: 0.01 }}
+                          sx={{ width: 80 }}
+                          InputProps={{
+                            endAdornment: <InputAdornment position="end">%</InputAdornment>,
+                          }}
+                        />
+                      </Box>
+                    </Box>
                   );
                 })}
-              </div>
-            </div>
+              </Paper>
+            </Box>
 
-            <button type="submit" className="btn btn-primary">
+            <Button type="submit" variant="contained" color="primary" startIcon={<AddIcon />} size="large">
               Add Expense
-            </button>
+            </Button>
           </form>
-        </div>
+        </Paper>
       )}
 
-      <div className="card">
-        <h3 className="text-lg font-bold mb-4">Expenses</h3>
+      <Paper elevation={2} sx={{ p: 3 }}>
+        <Typography variant="h5" component="h3" gutterBottom>
+          Expenses
+        </Typography>
+        <Divider sx={{ mb: 3 }} />
 
         {activeTour.expenses.length === 0 ? (
-          <p className="text-gray-500">No expenses added yet.</p>
+          <Alert severity="info">No expenses added yet.</Alert>
         ) : (
-          <div className="space-y-4">
+          <Stack spacing={2}>
             {activeTour.expenses
               .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
               .map((expense) => {
@@ -242,52 +371,85 @@ const Expenses: React.FC = () => {
                 const currency = activeTour.currencies.find((c) => c.code === expense.currencyCode);
 
                 return (
-                  <div key={expense.id} className="border rounded-lg overflow-hidden">
-                    <div className="flex justify-between items-center p-4 cursor-pointer hover:bg-gray-50" onClick={() => toggleExpenseDetails(expense.id)}>
-                      <div className="flex-1">
-                        <div className="font-medium">{expense.description}</div>
-                        <div className="text-sm text-gray-500">{new Date(expense.date).toLocaleDateString()}</div>
-                      </div>
-                      <div className="flex-1 text-right">
-                        <div className="font-medium">{formatCurrency(expense.amount, expense.currencyCode)}</div>
-                        <div className="text-sm text-gray-500">Paid by {paidBy?.name || "Unknown"}</div>
-                      </div>
-                      <div className="ml-4">
-                        <svg className={`w-5 h-5 transition-transform ${expandedExpenseId === expense.id ? "transform rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
-                        </svg>
-                      </div>
-                    </div>
-
-                    {expandedExpenseId === expense.id && (
-                      <div className="p-4 bg-gray-50 border-t">
-                        <div className="mb-4">
-                          <h4 className="font-medium mb-2">Split Details</h4>
-                          <div className="space-y-1">
-                            {expense.splits.map((split) => (
-                              <div key={split.travelerId} className="flex justify-between text-sm">
-                                <span>{getTravelerName(split.travelerId, activeTour.travelers)}</span>
-                                <span className="flex items-center">
-                                  {formatCurrency((split.percentage / 100) * expense.amount, expense.currencyCode)} <span className="text-gray-500 ml-2">({split.percentage.toFixed(1)}%)</span>
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                        <div className="flex justify-end">
-                          <button onClick={() => handleRemoveExpense(expense.id)} className="text-red-600 hover:text-red-800">
-                            Delete Expense
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                  <Card key={expense.id} variant="outlined">
+                    <CardContent sx={{ pb: 1 }}>
+                      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }} onClick={() => toggleExpenseDetails(expense.id)}>
+                        <Box>
+                          <Typography variant="h6">{expense.description}</Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            {new Date(expense.date).toLocaleDateString()}
+                          </Typography>
+                        </Box>
+                        <Box sx={{ display: "flex", alignItems: "center" }}>
+                          <Typography variant="h6" color="primary">
+                            {formatCurrency(expense.amount, expense.currencyCode)}
+                          </Typography>
+                          {expandedExpenseId === expense.id ? <ExpandLessIcon sx={{ ml: 1 }} /> : <ExpandMoreIcon sx={{ ml: 1 }} />}
+                        </Box>
+                      </Box>
+                      <Collapse in={expandedExpenseId === expense.id}>
+                        <Box sx={{ mt: 2 }}>
+                          <Typography variant="body2">
+                            <strong>Paid by:</strong> {paidBy?.name || "Unknown"}
+                          </Typography>
+                          <Typography variant="body2">
+                            <strong>Currency:</strong> {currency?.name || expense.currencyCode}
+                          </Typography>
+                          <Divider sx={{ my: 1 }} />
+                          <Typography variant="subtitle2" gutterBottom>
+                            Split Details:
+                          </Typography>
+                          <TableContainer component={Paper} variant="outlined">
+                            <Table size="small">
+                              <TableHead>
+                                <TableRow>
+                                  <TableCell>Traveler</TableCell>
+                                  <TableCell align="right">Amount</TableCell>
+                                  <TableCell align="right">Percentage</TableCell>
+                                </TableRow>
+                              </TableHead>
+                              <TableBody>
+                                {expense.splits.map((split) => (
+                                  <TableRow key={split.travelerId}>
+                                    <TableCell>{getTravelerName(split.travelerId, activeTour.travelers)}</TableCell>
+                                    <TableCell align="right">{formatCurrency(split.amount, expense.currencyCode)}</TableCell>
+                                    <TableCell align="right">{split.percentage.toFixed(2)}%</TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </TableContainer>
+                        </Box>
+                      </Collapse>
+                    </CardContent>
+                    <CardActions sx={{ justifyContent: "flex-end", pt: 0 }}>
+                      <IconButton size="small" color="error" onClick={() => handleOpenDeleteDialog(expense.id)} title="Delete Expense">
+                        <DeleteIcon />
+                      </IconButton>
+                    </CardActions>
+                  </Card>
                 );
               })}
-          </div>
+          </Stack>
         )}
-      </div>
-    </div>
+      </Paper>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteDialogOpen} onClose={handleCloseDeleteDialog}>
+        <DialogTitle>Delete Expense</DialogTitle>
+        <DialogContent>
+          <DialogContentText>Are you sure you want to remove this expense? This action cannot be undone.</DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseDeleteDialog} color="primary">
+            Cancel
+          </Button>
+          <Button onClick={handleConfirmDelete} color="error" variant="contained">
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </>
   );
 };
 
