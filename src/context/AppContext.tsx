@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
-import { AppState, Currency, Expense, PaymentRecord, Tour, Traveler } from "../types";
+import { AppState, Currency, DEFAULT_EXPENSE_CATEGORIES, Expense, ExpenseCategory, PaymentRecord, Tour, Traveler, User } from "../types";
 import { parseShareableLink } from "../utils";
 import { deleteTour as deleteSupabaseTour, loadAppState, saveAppState } from "../utils/supabase";
 
@@ -16,12 +16,16 @@ interface AppContextType {
   addCurrency: (tourId: string, code: string, name: string, exchangeRate: number) => void;
   updateCurrency: (tourId: string, currencyCode: string, updates: Partial<Currency>) => void;
   removeCurrency: (tourId: string, currencyCode: string) => void;
-  addExpense: (tourId: string, expenseData: Omit<Expense, "id">) => void;
+  addExpense: (tourId: string, expenseData: Omit<Expense, "id" | "createdById" | "createdAt">) => void;
   updateExpense: (tourId: string, expenseId: string, updates: Partial<Expense>) => void;
   removeExpense: (tourId: string, expenseId: string) => void;
-  addPayment: (tourId: string, paymentData: Omit<PaymentRecord, "id">) => void;
+  addPayment: (tourId: string, paymentData: Omit<PaymentRecord, "id" | "createdById" | "createdAt">) => void;
   removePayment: (tourId: string, paymentId: string) => void;
   importTourFromLink: (url: string) => boolean;
+  setCurrentUser: (user: User | null) => void;
+  addExpenseCategory: (category: Omit<ExpenseCategory, "id">) => void;
+  updateExpenseCategory: (categoryId: string, updates: Partial<ExpenseCategory>) => void;
+  removeExpenseCategory: (categoryId: string) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -29,6 +33,8 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 const initialState: AppState = {
   tours: [],
   activeTourId: null,
+  currentUser: null,
+  expenseCategories: DEFAULT_EXPENSE_CATEGORIES,
 };
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -49,6 +55,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             const initialState: AppState = {
               tours: [tourData],
               activeTourId: tourData.id,
+              currentUser: null,
+              expenseCategories: DEFAULT_EXPENSE_CATEGORIES,
             };
             setState(initialState);
           } catch (error) {
@@ -88,6 +96,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [state, isLoading]);
 
   const createTour = (name: string, baseCurrencyCode: string) => {
+    if (!state.currentUser) {
+      console.error("Cannot create tour: No user is logged in");
+      return;
+    }
+
     const newTour: Tour = {
       id: uuidv4(),
       name,
@@ -104,6 +117,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       payments: [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
+      createdById: state.currentUser.id,
+      members: [state.currentUser.id],
     };
 
     setState((prevState) => ({
@@ -324,7 +339,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }));
   };
 
-  const addExpense = (tourId: string, expenseData: Omit<Expense, "id">) => {
+  const addExpense = (tourId: string, expenseData: Omit<Expense, "id" | "createdById" | "createdAt">) => {
+    if (!state.currentUser) {
+      console.error("Cannot add expense: No user is logged in");
+      return;
+    }
+
     setState((prevState) => ({
       ...prevState,
       tours: prevState.tours.map((tour) => {
@@ -332,6 +352,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const newExpense: Expense = {
             id: uuidv4(),
             ...expenseData,
+            createdById: state.currentUser!.id,
+            createdAt: new Date().toISOString(),
           };
 
           return {
@@ -377,7 +399,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }));
   };
 
-  const addPayment = (tourId: string, paymentData: Omit<PaymentRecord, "id">) => {
+  const addPayment = (tourId: string, paymentData: Omit<PaymentRecord, "id" | "createdById" | "createdAt">) => {
+    if (!state.currentUser) {
+      console.error("Cannot add payment: No user is logged in");
+      return;
+    }
+
     setState((prevState) => ({
       ...prevState,
       tours: prevState.tours.map((tour) => {
@@ -385,6 +412,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const newPayment: PaymentRecord = {
             id: uuidv4(),
             ...paymentData,
+            createdById: state.currentUser!.id,
+            createdAt: new Date().toISOString(),
           };
 
           return {
@@ -441,6 +470,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const setCurrentUser = (user: User | null) => {
+    setState((prevState) => ({
+      ...prevState,
+      currentUser: user,
+    }));
+  };
+
+  const addExpenseCategory = (category: Omit<ExpenseCategory, "id">) => {
+    const newCategory: ExpenseCategory = {
+      id: uuidv4(),
+      ...category,
+    };
+
+    setState((prevState) => ({
+      ...prevState,
+      expenseCategories: [...prevState.expenseCategories, newCategory],
+    }));
+  };
+
+  const updateExpenseCategory = (categoryId: string, updates: Partial<ExpenseCategory>) => {
+    setState((prevState) => ({
+      ...prevState,
+      expenseCategories: prevState.expenseCategories.map((category) => (category.id === categoryId ? { ...category, ...updates } : category)),
+    }));
+  };
+
+  const removeExpenseCategory = (categoryId: string) => {
+    setState((prevState) => ({
+      ...prevState,
+      expenseCategories: prevState.expenseCategories.filter((category) => category.id !== categoryId),
+    }));
+  };
+
   if (isLoading) {
     return <div>Loading...</div>;
   }
@@ -465,6 +527,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addPayment,
         removePayment,
         importTourFromLink,
+        setCurrentUser,
+        addExpenseCategory,
+        updateExpenseCategory,
+        removeExpenseCategory,
       }}
     >
       {children}
