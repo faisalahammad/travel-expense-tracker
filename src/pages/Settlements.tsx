@@ -26,13 +26,15 @@ import {
   TableHead,
   TableRow,
   TextField,
+  Tooltip,
   Typography,
 } from "@mui/material";
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../context/AppContext";
-import { calculateSettlements, formatCurrency, getTravelerName } from "../utils";
+import { formatCurrency, getTravelerName } from "../utils";
 import { exportTourToExcel } from "../utils/excelExport";
+import { calculateBalances, calculateSettlements } from "../utils/settlementCalculator";
 
 const Settlements: React.FC = () => {
   const { state, addPayment, removePayment } = useApp();
@@ -62,7 +64,91 @@ const Settlements: React.FC = () => {
     return null;
   }
 
+  const balances = calculateBalances(activeTour);
   const settlements = calculateSettlements(activeTour);
+
+  // Calculate expense totals for each traveler
+  const calculateTravelerExpenseTotals = (travelerId: string) => {
+    // Total paid by this traveler
+    const totalPaid = activeTour.expenses
+      .filter((expense) => expense.paidById === travelerId)
+      .reduce((sum, expense) => {
+        // Convert to base currency if needed
+        if (expense.currencyCode !== activeTour.baseCurrencyCode) {
+          const currency = activeTour.currencies.find((c) => c.code === expense.currencyCode);
+          if (currency) {
+            return sum + expense.amount / currency.exchangeRate;
+          }
+        }
+        return sum + expense.amount;
+      }, 0);
+
+    // Total owed by this traveler
+    const totalOwed = activeTour.expenses.reduce((sum, expense) => {
+      const split = expense.splits.find((s) => s.travelerId === travelerId);
+      if (!split) return sum;
+
+      // Convert to base currency if needed
+      if (expense.currencyCode !== activeTour.baseCurrencyCode) {
+        const currency = activeTour.currencies.find((c) => c.code === expense.currencyCode);
+        if (currency) {
+          return sum + split.amount / currency.exchangeRate;
+        }
+      }
+      return sum + split.amount;
+    }, 0);
+
+    // Calculate payments made by this traveler
+    const paymentsMade = activeTour.payments
+      ? activeTour.payments
+          .filter((payment) => payment.fromTravelerId === travelerId)
+          .reduce((sum, payment) => {
+            // Convert to base currency if needed
+            if (payment.currencyCode !== activeTour.baseCurrencyCode) {
+              const currency = activeTour.currencies.find((c) => c.code === payment.currencyCode);
+              if (currency) {
+                return sum + payment.amount / currency.exchangeRate;
+              }
+            }
+            return sum + payment.amount;
+          }, 0)
+      : 0;
+
+    // Calculate payments received by this traveler
+    const paymentsReceived = activeTour.payments
+      ? activeTour.payments
+          .filter((payment) => payment.toTravelerId === travelerId)
+          .reduce((sum, payment) => {
+            // Convert to base currency if needed
+            if (payment.currencyCode !== activeTour.baseCurrencyCode) {
+              const currency = activeTour.currencies.find((c) => c.code === payment.currencyCode);
+              if (currency) {
+                return sum + payment.amount / currency.exchangeRate;
+              }
+            }
+            return sum + payment.amount;
+          }, 0)
+      : 0;
+
+    // Calculate net expense balance (what they paid minus what they owed)
+    const netExpenseBalance = totalPaid - totalOwed;
+
+    // Calculate net payment balance (what they received minus what they paid)
+    const netPaymentBalance = paymentsReceived - paymentsMade;
+
+    // Calculate final balance (net expense balance plus net payment balance)
+    const finalBalance = netExpenseBalance + netPaymentBalance;
+
+    return {
+      totalPaid: Math.round(totalPaid * 100) / 100,
+      totalOwed: Math.round(totalOwed * 100) / 100,
+      paymentsMade: Math.round(paymentsMade * 100) / 100,
+      paymentsReceived: Math.round(paymentsReceived * 100) / 100,
+      netExpenseBalance: Math.round(netExpenseBalance * 100) / 100,
+      netPaymentBalance: Math.round(netPaymentBalance * 100) / 100,
+      finalBalance: Math.round(finalBalance * 100) / 100,
+    };
+  };
 
   const handleExportToExcel = () => {
     exportTourToExcel(activeTour);
@@ -79,6 +165,14 @@ const Settlements: React.FC = () => {
 
   const handleClosePaymentDialog = () => {
     setPaymentDialogOpen(false);
+    // Reset form
+    setFromTravelerId("");
+    setToTravelerId("");
+    setPaymentAmount("");
+    setPaymentCurrency("");
+    setPaymentDate(new Date().toISOString().split("T")[0]);
+    setPaymentMethod("Cash");
+    setPaymentNotes("");
   };
 
   const handleAddPayment = () => {
@@ -93,17 +187,8 @@ const Settlements: React.FC = () => {
         notes: paymentNotes || undefined,
       });
 
-      // Reset form
-      setFromTravelerId("");
-      setToTravelerId("");
-      setPaymentAmount("");
-      setPaymentCurrency("");
-      setPaymentDate(new Date().toISOString().split("T")[0]);
-      setPaymentMethod("Cash");
-      setPaymentNotes("");
-
       // Close dialog
-      setPaymentDialogOpen(false);
+      handleClosePaymentDialog();
     }
   };
 
@@ -233,38 +318,19 @@ const Settlements: React.FC = () => {
             ) : (
               <List disablePadding>
                 {activeTour.travelers.map((traveler) => {
-                  // Calculate total paid by this traveler
-                  const totalPaid = activeTour.expenses
-                    .filter((expense) => expense.paidById === traveler.id)
-                    .reduce((sum, expense) => {
-                      // Convert to base currency if needed
-                      if (expense.currencyCode !== activeTour.baseCurrencyCode) {
-                        const currency = activeTour.currencies.find((c) => c.code === expense.currencyCode);
-                        if (currency) {
-                          return sum + expense.amount / currency.exchangeRate;
-                        }
-                      }
-                      return sum + expense.amount;
-                    }, 0);
+                  // Get the traveler's financial details
+                  const travelerTotals = calculateTravelerExpenseTotals(traveler.id);
+                  const balance = travelerTotals.finalBalance;
 
-                  // Calculate total owed by this traveler
-                  const totalOwed = activeTour.expenses.reduce((sum, expense) => {
-                    const split = expense.splits.find((s) => s.travelerId === traveler.id);
-
-                    if (!split) return sum;
-
-                    // Convert to base currency if needed
-                    if (expense.currencyCode !== activeTour.baseCurrencyCode) {
-                      const currency = activeTour.currencies.find((c) => c.code === expense.currencyCode);
-                      if (currency) {
-                        return sum + split.amount / currency.exchangeRate;
-                      }
-                    }
-
-                    return sum + split.amount;
-                  }, 0);
-
-                  const balance = totalPaid - totalOwed;
+                  // Determine background color based on balance
+                  let bgColor = "transparent";
+                  if (Math.abs(balance) < 0.01) {
+                    bgColor = "info.light"; // Balanced (close to zero)
+                  } else if (balance > 0) {
+                    bgColor = "success.light"; // Positive balance
+                  } else {
+                    bgColor = "error.light"; // Negative balance
+                  }
 
                   return (
                     <ListItem
@@ -274,17 +340,32 @@ const Settlements: React.FC = () => {
                         px: 2,
                         mb: 1,
                         borderRadius: 1,
-                        bgcolor: balance > 0 ? "success.light" : balance < 0 ? "error.light" : "transparent",
+                        bgcolor: bgColor,
                       }}
                     >
                       <ListItemText primary={traveler.name} primaryTypographyProps={{ fontWeight: "medium" }} />
                       <Box sx={{ textAlign: "right" }}>
-                        <Typography variant="body1" fontWeight="medium" color={balance > 0 ? "success.main" : balance < 0 ? "error.main" : "text.primary"}>
+                        <Typography variant="body1" fontWeight="medium" color={Math.abs(balance) < 0.01 ? "text.primary" : balance > 0 ? "success.main" : "error.main"}>
                           {formatCurrency(balance, activeTour.baseCurrencyCode)}
                         </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          Paid: {formatCurrency(totalPaid, activeTour.baseCurrencyCode)}, Owed: {formatCurrency(totalOwed, activeTour.baseCurrencyCode)}
-                        </Typography>
+                        <Tooltip
+                          title={
+                            <React.Fragment>
+                              <Typography variant="body2">Expense Balance: {formatCurrency(travelerTotals.netExpenseBalance, activeTour.baseCurrencyCode)}</Typography>
+                              <Typography variant="body2">Payment Balance: {formatCurrency(travelerTotals.netPaymentBalance, activeTour.baseCurrencyCode)}</Typography>
+                              <Divider sx={{ my: 1 }} />
+                              <Typography variant="body2">Paid: {formatCurrency(travelerTotals.totalPaid, activeTour.baseCurrencyCode)}</Typography>
+                              <Typography variant="body2">Owed: {formatCurrency(travelerTotals.totalOwed, activeTour.baseCurrencyCode)}</Typography>
+                              <Typography variant="body2">Payments Made: {formatCurrency(travelerTotals.paymentsMade, activeTour.baseCurrencyCode)}</Typography>
+                              <Typography variant="body2">Payments Received: {formatCurrency(travelerTotals.paymentsReceived, activeTour.baseCurrencyCode)}</Typography>
+                            </React.Fragment>
+                          }
+                          arrow
+                        >
+                          <Typography variant="caption" color="text.secondary" sx={{ cursor: "help" }}>
+                            Expenses: {formatCurrency(travelerTotals.netExpenseBalance, activeTour.baseCurrencyCode)}, Payments: {formatCurrency(travelerTotals.netPaymentBalance, activeTour.baseCurrencyCode)}
+                          </Typography>
+                        </Tooltip>
                       </Box>
                     </ListItem>
                   );
@@ -368,18 +449,31 @@ const Settlements: React.FC = () => {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {settlements.map((settlement, index) => (
-                  <TableRow key={index}>
-                    <TableCell>{getTravelerName(settlement.fromTravelerId, activeTour.travelers)}</TableCell>
-                    <TableCell>{getTravelerName(settlement.toTravelerId, activeTour.travelers)}</TableCell>
-                    <TableCell>{formatCurrency(settlement.amount, settlement.currencyCode)}</TableCell>
-                    <TableCell>
-                      <Button size="small" variant="outlined" onClick={() => handleOpenPaymentDialog(settlement.fromTravelerId, settlement.toTravelerId, settlement.amount)}>
-                        Record Payment
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {settlements
+                  .map((settlement, index) => {
+                    // Get the current balance of the debtor
+                    const debtorTotals = calculateTravelerExpenseTotals(settlement.fromTravelerId);
+                    const debtorBalance = debtorTotals.finalBalance;
+
+                    // Only show settlements where the debtor still has a negative balance
+                    // This ensures that payments already made are reflected in the settlement plan
+                    if (debtorBalance < -0.01) {
+                      return (
+                        <TableRow key={`${settlement.fromTravelerId}-${settlement.toTravelerId}-${index}`}>
+                          <TableCell>{getTravelerName(settlement.fromTravelerId, activeTour.travelers)}</TableCell>
+                          <TableCell>{getTravelerName(settlement.toTravelerId, activeTour.travelers)}</TableCell>
+                          <TableCell>{formatCurrency(settlement.amount, settlement.currencyCode)}</TableCell>
+                          <TableCell>
+                            <Button size="small" variant="outlined" onClick={() => handleOpenPaymentDialog(settlement.fromTravelerId, settlement.toTravelerId, settlement.amount)}>
+                              Record Payment
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    }
+                    return null;
+                  })
+                  .filter(Boolean)}
               </TableBody>
             </Table>
           </TableContainer>

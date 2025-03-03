@@ -1,4 +1,4 @@
-import { Add as AddIcon, Delete as DeleteIcon, ExpandLess as ExpandLessIcon, ExpandMore as ExpandMoreIcon, FilterList as FilterIcon, Person as PersonIcon, Search as SearchIcon } from "@mui/icons-material";
+import { Delete as DeleteIcon, Edit as EditIcon, ExpandLess as ExpandLessIcon, ExpandMore as ExpandMoreIcon, FilterList as FilterIcon, Search as SearchIcon } from "@mui/icons-material";
 import {
   Alert,
   Box,
@@ -34,7 +34,7 @@ import {
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../context/AppContext";
-import { ExpenseSplit } from "../types";
+import { Expense, ExpenseSplit } from "../types";
 import { formatCurrency, getTravelerName } from "../utils";
 
 const Expenses: React.FC = () => {
@@ -46,6 +46,10 @@ const Expenses: React.FC = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [expenseToDelete, setExpenseToDelete] = useState<string | null>(null);
 
+  // Edit expense state
+  const [editMode, setEditMode] = useState(false);
+  const [editExpenseId, setEditExpenseId] = useState<string | null>(null);
+
   // Search and filter state
   const [searchTerm, setSearchTerm] = useState("");
   const [filterPaidBy, setFilterPaidBy] = useState("");
@@ -53,7 +57,7 @@ const Expenses: React.FC = () => {
   const [filterDateTo, setFilterDateTo] = useState("");
   const [showFilters, setShowFilters] = useState(false);
 
-  // Form state for new expense
+  // Form state for new/edit expense
   const [newExpenseDate, setNewExpenseDate] = useState(new Date().toISOString().split("T")[0]);
   const [newExpenseAmount, setNewExpenseAmount] = useState("");
   const [newExpenseCurrency, setNewExpenseCurrency] = useState("");
@@ -85,13 +89,34 @@ const Expenses: React.FC = () => {
       if (splitEqually) {
         const equalSplits = activeTour.travelers.map((traveler) => ({
           travelerId: traveler.id,
-          amount: parseFloat(equalAmount.toFixed(2)),
+          amount: parseFloat((expenseAmount / activeTour.travelers.length).toFixed(2)),
           percentage: 0,
         }));
+
+        // Adjust the last split to account for rounding errors
+        const totalSplitAmount = equalSplits.reduce((sum, split) => sum + split.amount, 0);
+        if (totalSplitAmount !== expenseAmount && equalSplits.length > 0) {
+          const diff = expenseAmount - totalSplitAmount;
+          equalSplits[equalSplits.length - 1].amount = parseFloat((equalSplits[equalSplits.length - 1].amount + diff).toFixed(2));
+        }
+
         setNewExpenseSplits(equalSplits);
       }
     }
   }, [newExpenseAmount, activeTour.travelers, splitEqually]);
+
+  const resetForm = () => {
+    setNewExpenseDate(new Date().toISOString().split("T")[0]);
+    setNewExpenseAmount("");
+    setNewExpenseCurrency("");
+    setNewExpenseDescription("");
+    setNewExpensePaidBy("");
+    setNewExpenseSplits([]);
+    setSplitEqually(true);
+    setTotalAmount(0);
+    setEditMode(false);
+    setEditExpenseId(null);
+  };
 
   const handleAddExpense = (e: React.FormEvent) => {
     e.preventDefault();
@@ -104,25 +129,30 @@ const Expenses: React.FC = () => {
 
       // Only proceed if the total split amount equals the expense amount
       if (Math.abs(totalSplitAmount - amount) < 0.01) {
-        // Create the expense with amount-based splits
-        addExpense(activeTourId, {
-          date: newExpenseDate,
-          amount,
-          currencyCode: newExpenseCurrency,
-          description: newExpenseDescription,
-          paidById: newExpensePaidBy,
-          splits: newExpenseSplits,
-        });
+        if (editMode && editExpenseId) {
+          // Update existing expense
+          updateExpense(activeTourId, editExpenseId, {
+            date: newExpenseDate,
+            amount,
+            currencyCode: newExpenseCurrency,
+            description: newExpenseDescription,
+            paidById: newExpensePaidBy,
+            splits: newExpenseSplits,
+          });
+        } else {
+          // Create new expense
+          addExpense(activeTourId, {
+            date: newExpenseDate,
+            amount,
+            currencyCode: newExpenseCurrency,
+            description: newExpenseDescription,
+            paidById: newExpensePaidBy,
+            splits: newExpenseSplits,
+          });
+        }
 
         // Reset form
-        setNewExpenseDate(new Date().toISOString().split("T")[0]);
-        setNewExpenseAmount("");
-        setNewExpenseCurrency("");
-        setNewExpenseDescription("");
-        setNewExpensePaidBy("");
-        setNewExpenseSplits([]);
-        setSplitEqually(true);
-        setTotalAmount(0);
+        resetForm();
       } else {
         // Show error or adjust splits automatically
         alert(`The total split amount (${totalSplitAmount.toFixed(2)}) must equal the expense amount (${amount.toFixed(2)})`);
@@ -130,63 +160,128 @@ const Expenses: React.FC = () => {
     }
   };
 
+  const handleEditExpense = (expense: Expense) => {
+    setEditMode(true);
+    setEditExpenseId(expense.id);
+    setNewExpenseDate(expense.date);
+    setNewExpenseAmount(expense.amount.toString());
+    setNewExpenseCurrency(expense.currencyCode);
+    setNewExpenseDescription(expense.description);
+    setNewExpensePaidBy(expense.paidById);
+    setNewExpenseSplits(expense.splits);
+    setSplitEqually(false); // Don't automatically split equally when editing
+    setTotalAmount(expense.amount);
+
+    // Scroll to the form
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleCancelEdit = () => {
+    resetForm();
+  };
+
   const handleSplitAmountChange = (travelerId: string, amount: number) => {
+    // Get the current split for this traveler
+    const currentSplit = newExpenseSplits.find((split) => split.travelerId === travelerId);
+
+    // If the amount is 0, we're effectively unchecking this traveler
+    const isUnchecking = amount === 0 && currentSplit && currentSplit.amount > 0;
+
+    // Update the split for this traveler
     const updatedSplits = newExpenseSplits.map((split) => (split.travelerId === travelerId ? { ...split, amount, percentage: 0 } : split));
+
+    // If we're unchecking a traveler, redistribute their amount to other travelers with non-zero amounts
+    if (isUnchecking) {
+      const expenseAmount = parseFloat(newExpenseAmount) || 0;
+      const activeSplits = updatedSplits.filter((split) => split.travelerId !== travelerId && split.amount > 0);
+
+      if (activeSplits.length > 0) {
+        // Calculate how much to redistribute
+        const amountToRedistribute = currentSplit ? currentSplit.amount : 0;
+        const amountPerActiveSplit = amountToRedistribute / activeSplits.length;
+
+        // Redistribute the amount
+        updatedSplits.forEach((split) => {
+          if (split.travelerId !== travelerId && split.amount > 0) {
+            split.amount = parseFloat((split.amount + amountPerActiveSplit).toFixed(2));
+          }
+        });
+
+        // Adjust the last active split to account for rounding errors
+        const totalSplitAmount = updatedSplits.reduce((sum, split) => sum + split.amount, 0);
+        if (Math.abs(totalSplitAmount - expenseAmount) > 0.01) {
+          const lastActiveSplit = updatedSplits.filter((split) => split.amount > 0).pop();
+          if (lastActiveSplit) {
+            lastActiveSplit.amount = parseFloat((lastActiveSplit.amount + (expenseAmount - totalSplitAmount)).toFixed(2));
+          }
+        }
+      }
+    }
+
     setNewExpenseSplits(updatedSplits);
+    setTotalAmount(updatedSplits.reduce((sum, split) => sum + split.amount, 0));
+  };
 
-    // Check if the total matches the expense amount
-    const totalSplitAmount = updatedSplits.reduce((sum, split) => sum + split.amount, 0);
+  const handleSetEqualSplits = () => {
     const expenseAmount = parseFloat(newExpenseAmount) || 0;
+    const activeTravelers = activeTour.travelers;
 
-    // Check if splits are equal
-    const equalAmount = expenseAmount / activeTour.travelers.length;
-    const isEqual = updatedSplits.every((split) => Math.abs(split.amount - equalAmount) < 0.01);
-    setSplitEqually(isEqual);
+    if (activeTravelers.length > 0 && expenseAmount > 0) {
+      const equalAmount = parseFloat((expenseAmount / activeTravelers.length).toFixed(2));
+      const equalSplits = activeTravelers.map((traveler) => ({
+        travelerId: traveler.id,
+        amount: equalAmount,
+        percentage: 0,
+      }));
+
+      // Adjust the last split to account for rounding errors
+      const totalSplitAmount = equalSplits.reduce((sum, split) => sum + split.amount, 0);
+      if (Math.abs(totalSplitAmount - expenseAmount) > 0.01 && equalSplits.length > 0) {
+        equalSplits[equalSplits.length - 1].amount = parseFloat((equalSplits[equalSplits.length - 1].amount + (expenseAmount - totalSplitAmount)).toFixed(2));
+      }
+
+      setNewExpenseSplits(equalSplits);
+      setTotalAmount(expenseAmount);
+      setSplitEqually(true);
+    }
   };
 
-  const handleSplitEqually = () => {
-    const expenseAmount = parseFloat(newExpenseAmount) || 0;
-    const equalAmount = expenseAmount / activeTour.travelers.length;
-
-    const equalSplits = activeTour.travelers.map((traveler) => ({
-      travelerId: traveler.id,
-      amount: parseFloat(equalAmount.toFixed(2)),
-      percentage: 0, // We're not using percentage anymore
-    }));
-
-    setNewExpenseSplits(equalSplits);
-    setSplitEqually(true);
-  };
-
-  const handleExpenseAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newAmount = e.target.value;
-    setNewExpenseAmount(newAmount);
-
-    const expenseAmount = parseFloat(newAmount) || 0;
-    setTotalAmount(expenseAmount);
-  };
-
-  const handleOpenDeleteDialog = (expenseId: string) => {
+  const handleDeleteDialogOpen = (expenseId: string) => {
     setExpenseToDelete(expenseId);
     setDeleteDialogOpen(true);
   };
 
-  const handleCloseDeleteDialog = () => {
+  const handleDeleteDialogClose = () => {
     setDeleteDialogOpen(false);
     setExpenseToDelete(null);
   };
 
-  const handleConfirmDelete = () => {
+  const handleDeleteExpense = () => {
     if (expenseToDelete) {
       removeExpense(activeTourId, expenseToDelete);
-      setDeleteDialogOpen(false);
-      setExpenseToDelete(null);
+      handleDeleteDialogClose();
     }
   };
 
   const toggleExpenseDetails = (expenseId: string) => {
     setExpandedExpenseId(expandedExpenseId === expenseId ? null : expenseId);
   };
+
+  // Filter expenses based on search term and filters
+  const filteredExpenses = activeTour.expenses.filter((expense) => {
+    // Search term filter
+    const matchesSearch = expense.description.toLowerCase().includes(searchTerm.toLowerCase());
+
+    // Paid by filter
+    const matchesPaidBy = filterPaidBy ? expense.paidById === filterPaidBy : true;
+
+    // Date range filter
+    const expenseDate = new Date(expense.date);
+    const matchesDateFrom = filterDateFrom ? expenseDate >= new Date(filterDateFrom) : true;
+    const matchesDateTo = filterDateTo ? expenseDate <= new Date(filterDateTo) : true;
+
+    return matchesSearch && matchesPaidBy && matchesDateFrom && matchesDateTo;
+  });
 
   // Format date as DD/MM/YYYY
   const formatDate = (dateString: string) => {
@@ -198,329 +293,229 @@ const Expenses: React.FC = () => {
     });
   };
 
-  // Filter expenses based on search term and filters
-  const filteredExpenses = activeTour.expenses.filter((expense) => {
-    const matchesSearch = expense.description.toLowerCase().includes(searchTerm.toLowerCase());
-
-    const matchesPaidBy = filterPaidBy ? expense.paidById === filterPaidBy : true;
-
-    const expenseDate = new Date(expense.date);
-    const fromDate = filterDateFrom ? new Date(filterDateFrom) : null;
-    const toDate = filterDateTo ? new Date(filterDateTo) : null;
-
-    const matchesDateRange = (!fromDate || expenseDate >= fromDate) && (!toDate || expenseDate <= toDate);
-
-    return matchesSearch && matchesPaidBy && matchesDateRange;
-  });
-
   return (
     <>
       <Typography variant="h4" component="h1" gutterBottom>
-        Manage Expenses
-      </Typography>
-      <Typography variant="h6" component="h2" gutterBottom color="text.secondary">
-        Tour: {activeTour.name}
+        {editMode ? "Edit Expense" : "Add Expense"}
       </Typography>
 
-      {activeTour.travelers.length === 0 ? (
-        <Alert
-          severity="warning"
-          sx={{ mb: 4 }}
-          action={
-            <Button color="inherit" size="small" onClick={() => navigate("/travelers")}>
-              Add Travelers
-            </Button>
-          }
-        >
-          You need to add travelers before you can add expenses.
-        </Alert>
-      ) : (
-        <Paper elevation={2} sx={{ p: 3, mb: 4 }}>
-          <Typography variant="h5" component="h3" gutterBottom>
-            Add New Expense
-          </Typography>
-          <Divider sx={{ mb: 3 }} />
-          <Box component="form" onSubmit={handleAddExpense}>
-            <Grid container spacing={3}>
-              <Grid item xs={12} sm={6} md={3}>
-                <TextField fullWidth label="Date" type="date" value={newExpenseDate} onChange={(e) => setNewExpenseDate(e.target.value)} required InputLabelProps={{ shrink: true }} />
-              </Grid>
-              <Grid item xs={12} sm={6} md={3}>
-                <TextField fullWidth label="Amount" type="number" placeholder="e.g., 50.00" value={newExpenseAmount} onChange={handleExpenseAmountChange} inputProps={{ min: "0.01", step: "0.01" }} required />
-              </Grid>
-              <Grid item xs={12} sm={6} md={3}>
-                <FormControl fullWidth required>
-                  <InputLabel id="currency-select-label">Currency</InputLabel>
-                  <Select labelId="currency-select-label" value={newExpenseCurrency} onChange={(e) => setNewExpenseCurrency(e.target.value)} label="Currency">
-                    <MenuItem value={activeTour.baseCurrencyCode}>{activeTour.baseCurrencyCode}</MenuItem>
-                    {activeTour.currencies.map((currency) => (
-                      <MenuItem key={currency.code} value={currency.code}>
-                        {currency.code} - {currency.name}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid item xs={12} sm={6} md={3}>
-                <FormControl fullWidth required>
-                  <InputLabel id="paidby-label">Paid By</InputLabel>
-                  <Select
-                    labelId="paidby-label"
-                    id="expensePaidBy"
-                    value={newExpensePaidBy}
-                    onChange={(e) => setNewExpensePaidBy(e.target.value)}
-                    label="Paid By"
-                    startAdornment={
-                      <InputAdornment position="start">
-                        <PersonIcon color="action" />
-                      </InputAdornment>
-                    }
-                  >
-                    {activeTour.travelers.map((traveler) => (
-                      <MenuItem key={traveler.id} value={traveler.id}>
-                        {traveler.name}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid item xs={12}>
-                <TextField fullWidth label="Description" placeholder="What was this expense for?" value={newExpenseDescription} onChange={(e) => setNewExpenseDescription(e.target.value)} required />
-              </Grid>
+      <Paper elevation={2} sx={{ p: 3, mb: 4 }}>
+        <form onSubmit={handleAddExpense}>
+          <Grid container spacing={3}>
+            <Grid item xs={12} sm={6} md={3}>
+              <TextField fullWidth label="Date" type="date" value={newExpenseDate} onChange={(e) => setNewExpenseDate(e.target.value)} required InputLabelProps={{ shrink: true }} />
             </Grid>
-
-            <Box sx={{ mt: 4 }}>
+            <Grid item xs={12} sm={6} md={3}>
+              <TextField fullWidth label="Amount" type="number" value={newExpenseAmount} onChange={(e) => setNewExpenseAmount(e.target.value)} required inputProps={{ min: "0.01", step: "0.01" }} />
+            </Grid>
+            <Grid item xs={12} sm={6} md={3}>
+              <FormControl fullWidth required>
+                <InputLabel id="currency-label">Currency</InputLabel>
+                <Select labelId="currency-label" value={newExpenseCurrency} onChange={(e) => setNewExpenseCurrency(e.target.value)} label="Currency">
+                  <MenuItem value={activeTour.baseCurrencyCode}>{activeTour.baseCurrencyCode}</MenuItem>
+                  {activeTour.currencies.map((currency) => (
+                    <MenuItem key={currency.code} value={currency.code}>
+                      {currency.code} - {currency.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={6} md={3}>
+              <FormControl fullWidth required>
+                <InputLabel id="paid-by-label">Paid By</InputLabel>
+                <Select labelId="paid-by-label" value={newExpensePaidBy} onChange={(e) => setNewExpensePaidBy(e.target.value)} label="Paid By">
+                  {activeTour.travelers.map((traveler) => (
+                    <MenuItem key={traveler.id} value={traveler.id}>
+                      {traveler.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12}>
+              <TextField fullWidth label="Description" value={newExpenseDescription} onChange={(e) => setNewExpenseDescription(e.target.value)} required placeholder="What was this expense for?" />
+            </Grid>
+            <Grid item xs={12}>
+              <Typography variant="h6" gutterBottom>
+                Split Details
+              </Typography>
               <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
-                <Typography variant="h6">Split</Typography>
-                <Button variant="contained" color="secondary" onClick={handleSplitEqually} disabled={!newExpenseAmount || parseFloat(newExpenseAmount) <= 0}>
-                  SPLIT EQUALLY
+                <Typography variant="body2" color="text.secondary">
+                  Total Split Amount: {formatCurrency(totalAmount, newExpenseCurrency || activeTour.baseCurrencyCode)}
+                </Typography>
+                <Button variant="outlined" size="small" onClick={handleSetEqualSplits}>
+                  Split Equally
                 </Button>
               </Box>
-
-              <Paper elevation={1} sx={{ p: 3, bgcolor: "background.paper" }}>
-                {activeTour.travelers.length === 0 ? (
-                  <Alert severity="warning">No travelers added yet. Please add travelers first.</Alert>
-                ) : !newExpenseAmount || parseFloat(newExpenseAmount) <= 0 ? (
-                  <Alert severity="info">Enter an expense amount above to split it among travelers.</Alert>
-                ) : (
-                  <>
+              <TableContainer component={Paper} variant="outlined">
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Traveler</TableCell>
+                      <TableCell align="right">Amount</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
                     {activeTour.travelers.map((traveler) => {
-                      const split = newExpenseSplits.find((s) => s.travelerId === traveler.id) || {
-                        travelerId: traveler.id,
-                        amount: 0,
-                        percentage: 0,
-                      };
+                      const split = newExpenseSplits.find((s) => s.travelerId === traveler.id);
+                      const amount = split ? split.amount : 0;
 
                       return (
-                        <Grid container spacing={2} key={traveler.id} sx={{ mb: 2 }} alignItems="center">
-                          <Grid item xs={12} sm={4} md={3}>
-                            <Typography variant="body1">{traveler.name}</Typography>
-                          </Grid>
-                          <Grid item xs={12} sm={6} md={7}>
-                            <TextField
-                              fullWidth
-                              type="number"
-                              label={`Amount in ${newExpenseCurrency || activeTour.baseCurrencyCode}`}
-                              value={split.amount}
-                              onChange={(e) => handleSplitAmountChange(traveler.id, parseFloat(e.target.value) || 0)}
-                              InputProps={{
-                                startAdornment: <InputAdornment position="start">{newExpenseCurrency || activeTour.baseCurrencyCode}</InputAdornment>,
-                              }}
-                              variant="outlined"
-                              size="small"
-                            />
-                          </Grid>
-                          <Grid item xs={12} sm={2} md={2}>
-                            <Typography variant="body2" color="text.secondary" align="right">
-                              {((split.amount / (parseFloat(newExpenseAmount) || 1)) * 100).toFixed(1)}%
-                            </Typography>
-                          </Grid>
-                        </Grid>
+                        <TableRow key={traveler.id}>
+                          <TableCell>{traveler.name}</TableCell>
+                          <TableCell align="right">
+                            <TextField type="number" size="small" value={amount} onChange={(e) => handleSplitAmountChange(traveler.id, parseFloat(e.target.value) || 0)} inputProps={{ min: "0", step: "0.01", style: { textAlign: "right" } }} sx={{ width: "120px" }} />
+                          </TableCell>
+                        </TableRow>
                       );
                     })}
-
-                    <Box sx={{ mt: 2, display: "flex", justifyContent: "space-between", borderTop: "1px solid", borderColor: "divider", pt: 2 }}>
-                      <Typography variant="subtitle1">Total Split:</Typography>
-                      <Typography variant="subtitle1" color={Math.abs(newExpenseSplits.reduce((sum, split) => sum + split.amount, 0) - parseFloat(newExpenseAmount || "0")) < 0.01 ? "success.main" : "error.main"}>
-                        {newExpenseCurrency || activeTour.baseCurrencyCode} {newExpenseSplits.reduce((sum, split) => sum + split.amount, 0).toFixed(2)}
-                        {Math.abs(newExpenseSplits.reduce((sum, split) => sum + split.amount, 0) - parseFloat(newExpenseAmount || "0")) >= 0.01 && (
-                          <Typography component="span" variant="caption" color="error.main" sx={{ ml: 1 }}>
-                            (Doesn't match expense amount: {newExpenseCurrency || activeTour.baseCurrencyCode} {parseFloat(newExpenseAmount || "0").toFixed(2)})
-                          </Typography>
-                        )}
-                      </Typography>
-                    </Box>
-                  </>
-                )}
-              </Paper>
-            </Box>
-
-            <Grid item xs={12}>
-              <Button type="submit" variant="contained" color="primary" startIcon={<AddIcon />} sx={{ mt: 2 }}>
-                ADD EXPENSE
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Grid>
+            <Grid item xs={12} sx={{ display: "flex", justifyContent: "flex-end", gap: 2 }}>
+              {editMode && (
+                <Button variant="outlined" color="secondary" onClick={handleCancelEdit}>
+                  Cancel
+                </Button>
+              )}
+              <Button type="submit" variant="contained" color="primary">
+                {editMode ? "Update Expense" : "Add Expense"}
               </Button>
             </Grid>
-          </Box>
-        </Paper>
-      )}
-
-      <Paper elevation={2} sx={{ p: 3 }}>
-        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
-          <Typography variant="h5" component="h3" gutterBottom sx={{ mb: 0 }}>
-            Expenses
-          </Typography>
-          <Box sx={{ display: "flex", gap: 1 }}>
-            <Button startIcon={<FilterIcon />} variant="outlined" size="small" onClick={() => setShowFilters(!showFilters)}>
-              Filters
-            </Button>
-          </Box>
-        </Box>
-
-        <Collapse in={showFilters}>
-          <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
-            <Grid container spacing={2} alignItems="center">
-              <Grid item xs={12} sm={6} md={3}>
-                <TextField
-                  fullWidth
-                  label="Search"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Search expenses..."
-                  InputProps={{
-                    startAdornment: (
-                      <InputAdornment position="start">
-                        <SearchIcon />
-                      </InputAdornment>
-                    ),
-                  }}
-                  size="small"
-                />
-              </Grid>
-              <Grid item xs={12} sm={6} md={3}>
-                <FormControl fullWidth size="small">
-                  <InputLabel id="filter-paid-by-label">Paid By</InputLabel>
-                  <Select labelId="filter-paid-by-label" value={filterPaidBy} onChange={(e) => setFilterPaidBy(e.target.value)} label="Paid By">
-                    <MenuItem value="">All</MenuItem>
-                    {activeTour.travelers.map((traveler) => (
-                      <MenuItem key={traveler.id} value={traveler.id}>
-                        {traveler.name}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid item xs={12} sm={6} md={3}>
-                <TextField fullWidth label="From Date" type="date" value={filterDateFrom} onChange={(e) => setFilterDateFrom(e.target.value)} InputLabelProps={{ shrink: true }} size="small" />
-              </Grid>
-              <Grid item xs={12} sm={6} md={3}>
-                <TextField fullWidth label="To Date" type="date" value={filterDateTo} onChange={(e) => setFilterDateTo(e.target.value)} InputLabelProps={{ shrink: true }} size="small" />
-              </Grid>
-              <Grid item xs={12}>
-                <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 1 }}>
-                  <Button
-                    variant="outlined"
-                    size="small"
-                    onClick={() => {
-                      setSearchTerm("");
-                      setFilterPaidBy("");
-                      setFilterDateFrom("");
-                      setFilterDateTo("");
-                    }}
-                  >
-                    Clear Filters
-                  </Button>
-                </Box>
-              </Grid>
-            </Grid>
-          </Paper>
-        </Collapse>
-
-        <Divider sx={{ mb: 3 }} />
-
-        {activeTour.expenses.length === 0 ? (
-          <Alert severity="info">No expenses added yet.</Alert>
-        ) : filteredExpenses.length === 0 ? (
-          <Alert severity="info">No expenses match your search criteria.</Alert>
-        ) : (
-          <Stack spacing={2}>
-            {filteredExpenses
-              .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-              .map((expense) => {
-                const paidBy = activeTour.travelers.find((t) => t.id === expense.paidById);
-                const currency = activeTour.currencies.find((c) => c.code === expense.currencyCode);
-
-                return (
-                  <Card key={expense.id} variant="outlined" sx={{ borderRadius: 2, overflow: "hidden" }}>
-                    <CardContent sx={{ pb: 1 }}>
-                      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }} onClick={() => toggleExpenseDetails(expense.id)}>
-                        <Box>
-                          <Typography variant="h6">{expense.description}</Typography>
-                          <Typography variant="body2" color="text.secondary">
-                            {formatDate(expense.date)} • Paid by: {paidBy?.name || "Unknown"}
-                          </Typography>
-                        </Box>
-                        <Box sx={{ display: "flex", alignItems: "center" }}>
-                          <Typography variant="h6" color="primary">
-                            {formatCurrency(expense.amount, expense.currencyCode)}
-                          </Typography>
-                          {expandedExpenseId === expense.id ? <ExpandLessIcon sx={{ ml: 1 }} /> : <ExpandMoreIcon sx={{ ml: 1 }} />}
-                        </Box>
-                      </Box>
-                      <Collapse in={expandedExpenseId === expense.id}>
-                        <Box sx={{ mt: 2 }}>
-                          <Typography variant="body2">
-                            <strong>Currency:</strong> {currency?.name || expense.currencyCode}
-                          </Typography>
-                          <Divider sx={{ my: 1 }} />
-                          <Typography variant="subtitle2" gutterBottom>
-                            Split Details:
-                          </Typography>
-                          <TableContainer component={Paper} variant="outlined">
-                            <Table size="small">
-                              <TableHead>
-                                <TableRow>
-                                  <TableCell>Traveler</TableCell>
-                                  <TableCell align="right">Amount</TableCell>
-                                  <TableCell align="right">Percentage</TableCell>
-                                </TableRow>
-                              </TableHead>
-                              <TableBody>
-                                {expense.splits.map((split) => (
-                                  <TableRow key={split.travelerId}>
-                                    <TableCell>{getTravelerName(split.travelerId, activeTour.travelers)}</TableCell>
-                                    <TableCell align="right">{formatCurrency(split.amount, expense.currencyCode)}</TableCell>
-                                    <TableCell align="right">{split.percentage.toFixed(2)}%</TableCell>
-                                  </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
-                          </TableContainer>
-                        </Box>
-                      </Collapse>
-                    </CardContent>
-                    <CardActions sx={{ justifyContent: "flex-end", pt: 0 }}>
-                      <IconButton size="small" color="error" onClick={() => handleOpenDeleteDialog(expense.id)} title="Delete Expense">
-                        <DeleteIcon />
-                      </IconButton>
-                    </CardActions>
-                  </Card>
-                );
-              })}
-          </Stack>
-        )}
+          </Grid>
+        </form>
       </Paper>
 
+      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
+        <Typography variant="h4" component="h1">
+          Expenses
+        </Typography>
+        <Box sx={{ display: "flex", gap: 2 }}>
+          <TextField
+            placeholder="Search expenses..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            size="small"
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon fontSize="small" />
+                </InputAdornment>
+              ),
+            }}
+          />
+          <Button variant="outlined" color="primary" startIcon={<FilterIcon />} onClick={() => setShowFilters(!showFilters)} size="small">
+            Filters
+          </Button>
+        </Box>
+      </Box>
+
+      <Collapse in={showFilters}>
+        <Paper elevation={2} sx={{ p: 3, mb: 4 }}>
+          <Grid container spacing={3}>
+            <Grid item xs={12} sm={4}>
+              <FormControl fullWidth>
+                <InputLabel id="filter-paid-by-label">Paid By</InputLabel>
+                <Select labelId="filter-paid-by-label" value={filterPaidBy} onChange={(e) => setFilterPaidBy(e.target.value)} label="Paid By">
+                  <MenuItem value="">All</MenuItem>
+                  {activeTour.travelers.map((traveler) => (
+                    <MenuItem key={traveler.id} value={traveler.id}>
+                      {traveler.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={4}>
+              <TextField fullWidth label="From Date" type="date" value={filterDateFrom} onChange={(e) => setFilterDateFrom(e.target.value)} InputLabelProps={{ shrink: true }} />
+            </Grid>
+            <Grid item xs={12} sm={4}>
+              <TextField fullWidth label="To Date" type="date" value={filterDateTo} onChange={(e) => setFilterDateTo(e.target.value)} InputLabelProps={{ shrink: true }} />
+            </Grid>
+          </Grid>
+        </Paper>
+      </Collapse>
+
+      {filteredExpenses.length === 0 ? (
+        <Alert severity="info">No expenses found. Add your first expense using the form above.</Alert>
+      ) : (
+        <Stack spacing={2}>
+          {filteredExpenses
+            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+            .map((expense) => (
+              <Card key={expense.id} variant="outlined">
+                <CardContent sx={{ pb: 1 }}>
+                  <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                    <Box>
+                      <Typography variant="h6" component="div">
+                        {expense.description}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        {formatDate(expense.date)} • Paid by: {getTravelerName(expense.paidById, activeTour.travelers)}
+                      </Typography>
+                    </Box>
+                    <Typography variant="h6" component="div">
+                      {formatCurrency(expense.amount, expense.currencyCode)}
+                    </Typography>
+                  </Box>
+                </CardContent>
+                <CardActions sx={{ justifyContent: "space-between", px: 2 }}>
+                  <Button size="small" startIcon={expandedExpenseId === expense.id ? <ExpandLessIcon /> : <ExpandMoreIcon />} onClick={() => toggleExpenseDetails(expense.id)}>
+                    {expandedExpenseId === expense.id ? "Hide Details" : "Show Details"}
+                  </Button>
+                  <Box>
+                    <IconButton size="small" color="primary" onClick={() => handleEditExpense(expense)}>
+                      <EditIcon fontSize="small" />
+                    </IconButton>
+                    <IconButton size="small" color="error" onClick={() => handleDeleteDialogOpen(expense.id)}>
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  </Box>
+                </CardActions>
+                <Collapse in={expandedExpenseId === expense.id}>
+                  <Divider />
+                  <CardContent>
+                    <Typography variant="subtitle2" gutterBottom>
+                      Split Details:
+                    </Typography>
+                    <TableContainer component={Paper} variant="outlined">
+                      <Table size="small">
+                        <TableHead>
+                          <TableRow>
+                            <TableCell>Traveler</TableCell>
+                            <TableCell align="right">Amount</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {expense.splits
+                            .filter((split) => split.amount > 0) // Only show travelers with non-zero amounts
+                            .map((split) => (
+                              <TableRow key={split.travelerId}>
+                                <TableCell>{getTravelerName(split.travelerId, activeTour.travelers)}</TableCell>
+                                <TableCell align="right">{formatCurrency(split.amount, expense.currencyCode)}</TableCell>
+                              </TableRow>
+                            ))}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  </CardContent>
+                </Collapse>
+              </Card>
+            ))}
+        </Stack>
+      )}
+
       {/* Delete Confirmation Dialog */}
-      <Dialog open={deleteDialogOpen} onClose={handleCloseDeleteDialog}>
+      <Dialog open={deleteDialogOpen} onClose={handleDeleteDialogClose}>
         <DialogTitle>Delete Expense</DialogTitle>
         <DialogContent>
-          <DialogContentText>Are you sure you want to remove this expense? This action cannot be undone.</DialogContentText>
+          <DialogContentText>Are you sure you want to delete this expense? This action cannot be undone.</DialogContentText>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCloseDeleteDialog} color="primary">
-            Cancel
-          </Button>
-          <Button onClick={handleConfirmDelete} color="error" variant="contained">
+          <Button onClick={handleDeleteDialogClose}>Cancel</Button>
+          <Button onClick={handleDeleteExpense} color="error">
             Delete
           </Button>
         </DialogActions>

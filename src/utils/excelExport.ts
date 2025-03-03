@@ -1,6 +1,7 @@
 import * as XLSX from "xlsx";
-import { Settlement, Tour } from "../types";
+import { Tour } from "../types";
 import { getTravelerName } from "./index";
+import { calculateSettlements } from "./settlementCalculator";
 
 export const exportTourToExcel = (tour: Tour): void => {
   const { name, travelers, expenses, currencies, baseCurrencyCode, payments } = tour;
@@ -47,11 +48,10 @@ export const exportTourToExcel = (tour: Tour): void => {
       splitsData.push({
         "Expense ID": expense.id.substring(0, 8), // Use shorter ID
         Description: expense.description,
-        Traveler: getTravelerName(split.travelerId, travelers),
-        Amount: split.amount, // Use the actual split amount
-        Percentage: split.percentage,
-        Currency: expense.currencyCode,
         "Paid By": getTravelerName(expense.paidById, travelers),
+        Traveler: getTravelerName(split.travelerId, travelers),
+        Amount: split.amount,
+        Currency: expense.currencyCode,
       });
     });
   });
@@ -90,116 +90,4 @@ export const exportTourToExcel = (tour: Tour): void => {
 
   // Export workbook
   XLSX.writeFile(wb, `${name} - Travel Expenses.xlsx`);
-};
-
-// Helper function to calculate settlements for Excel export
-const calculateSettlements = (tour: Tour): Settlement[] => {
-  const { expenses, travelers, baseCurrencyCode, currencies, payments } = tour;
-
-  // Initialize balances for each traveler
-  const balances: Record<string, number> = {};
-  travelers.forEach((traveler) => {
-    balances[traveler.id] = 0;
-  });
-
-  // Calculate net balance for each traveler
-  expenses.forEach((expense) => {
-    const { paidById, amount, currencyCode, splits } = expense;
-
-    // Convert expense amount to base currency if needed
-    let amountInBaseCurrency = amount;
-    if (currencyCode !== baseCurrencyCode) {
-      const currency = currencies.find((c) => c.code === currencyCode);
-      if (currency) {
-        amountInBaseCurrency = amount / currency.exchangeRate;
-      }
-    }
-
-    // Add the full amount to the payer's balance
-    balances[paidById] += amountInBaseCurrency;
-
-    // Subtract each split from the respective traveler's balance
-    splits.forEach((split) => {
-      // Convert split amount to base currency if needed
-      let splitAmountInBaseCurrency = split.amount;
-      if (currencyCode !== baseCurrencyCode) {
-        const currency = currencies.find((c) => c.code === currencyCode);
-        if (currency) {
-          splitAmountInBaseCurrency = split.amount / currency.exchangeRate;
-        }
-      }
-
-      balances[split.travelerId] -= splitAmountInBaseCurrency;
-    });
-  });
-
-  // Apply payments to balances if there are any
-  if (payments && payments.length > 0) {
-    payments.forEach((payment) => {
-      const { fromTravelerId, toTravelerId, amount, currencyCode } = payment;
-
-      // Convert payment amount to base currency if needed
-      let amountInBaseCurrency = amount;
-      if (currencyCode !== baseCurrencyCode) {
-        const currency = currencies.find((c) => c.code === currencyCode);
-        if (currency) {
-          amountInBaseCurrency = amount / currency.exchangeRate;
-        }
-      }
-
-      // Subtract from the payer's balance
-      balances[fromTravelerId] -= amountInBaseCurrency;
-
-      // Add to the receiver's balance
-      balances[toTravelerId] += amountInBaseCurrency;
-    });
-  }
-
-  // Create a list of creditors (positive balance) and debtors (negative balance)
-  const creditors: { id: string; amount: number }[] = [];
-  const debtors: { id: string; amount: number }[] = [];
-
-  Object.entries(balances).forEach(([travelerId, balance]) => {
-    if (balance > 0) {
-      creditors.push({ id: travelerId, amount: balance });
-    } else if (balance < 0) {
-      debtors.push({ id: travelerId, amount: -balance });
-    }
-  });
-
-  // Sort by amount (descending)
-  creditors.sort((a, b) => b.amount - a.amount);
-  debtors.sort((a, b) => b.amount - a.amount);
-
-  // Calculate settlements
-  const settlements: Settlement[] = [];
-
-  while (debtors.length > 0 && creditors.length > 0) {
-    const debtor = debtors[0];
-    const creditor = creditors[0];
-
-    const amount = Math.min(debtor.amount, creditor.amount);
-
-    if (amount > 0) {
-      settlements.push({
-        fromTravelerId: debtor.id,
-        toTravelerId: creditor.id,
-        amount,
-        currencyCode: baseCurrencyCode,
-      });
-    }
-
-    debtor.amount -= amount;
-    creditor.amount -= amount;
-
-    if (debtor.amount < 0.01) {
-      debtors.shift();
-    }
-
-    if (creditor.amount < 0.01) {
-      creditors.shift();
-    }
-  }
-
-  return settlements;
 };
