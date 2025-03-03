@@ -136,36 +136,24 @@ const Currencies: React.FC = () => {
           Add New Currency
         </Typography>
         <Divider sx={{ mb: 3 }} />
-        <form onSubmit={handleAddCurrency}>
-          <Grid container spacing={3} alignItems="flex-end">
+        <Box component="form" onSubmit={handleAddCurrency}>
+          <Grid container spacing={2} alignItems="center">
             <Grid item xs={12} sm={6} md={3}>
-              <TextField fullWidth id="currencyCode" label="Currency Code" placeholder="e.g., EUR" variant="outlined" value={newCurrencyCode} onChange={(e) => setNewCurrencyCode(e.target.value)} inputProps={{ maxLength: 3 }} required helperText="3-letter code (e.g., USD, EUR, JPY)" />
+              <TextField fullWidth label="Currency Code" value={newCurrencyCode} onChange={(e) => setNewCurrencyCode(e.target.value.toUpperCase())} required variant="outlined" placeholder="3-letter code (e.g., USD)" inputProps={{ maxLength: 3, style: { textTransform: "uppercase" } }} />
+            </Grid>
+            <Grid item xs={12} sm={6} md={4}>
+              <TextField fullWidth label="Currency Name" value={newCurrencyName} onChange={(e) => setNewCurrencyName(e.target.value)} required variant="outlined" placeholder="e.g., US Dollar" />
             </Grid>
             <Grid item xs={12} sm={6} md={3}>
-              <TextField fullWidth id="currencyName" label="Currency Name" placeholder="e.g., Euro" variant="outlined" value={newCurrencyName} onChange={(e) => setNewCurrencyName(e.target.value)} required />
+              <TextField fullWidth label="Exchange Rate" value={newExchangeRate} onChange={(e) => setNewExchangeRate(e.target.value)} required variant="outlined" type="number" inputProps={{ min: "0.000001", step: "0.000001" }} placeholder={`Relative to ${activeTour.baseCurrencyCode}`} />
             </Grid>
-            <Grid item xs={12} sm={6} md={3}>
-              <TextField
-                fullWidth
-                id="exchangeRate"
-                label="Exchange Rate"
-                placeholder="e.g., 1.1"
-                variant="outlined"
-                type="number"
-                value={newExchangeRate}
-                onChange={(e) => setNewExchangeRate(e.target.value)}
-                inputProps={{ min: "0.0001", step: "0.0001" }}
-                required
-                helperText={`Relative to ${activeTour.baseCurrencyCode}`}
-              />
-            </Grid>
-            <Grid item xs={12} sm={6} md={3}>
-              <Button type="submit" variant="contained" color="primary" fullWidth startIcon={<CurrencyIcon />}>
-                Add Currency
+            <Grid item xs={12} sm={6} md={2}>
+              <Button type="submit" variant="contained" color="primary" fullWidth startIcon={<CurrencyIcon />} sx={{ height: "56px" }}>
+                ADD CURRENCY
               </Button>
             </Grid>
           </Grid>
-        </form>
+        </Box>
       </Paper>
 
       <Paper elevation={2} sx={{ p: 3 }}>

@@ -95,21 +95,21 @@ const Tours: React.FC = () => {
           Create New Tour
         </Typography>
         <Divider sx={{ mb: 3 }} />
-        <form onSubmit={handleCreateTour}>
-          <Grid container spacing={3} alignItems="flex-end">
+        <Box component="form" onSubmit={handleCreateTour}>
+          <Grid container spacing={2} alignItems="center">
             <Grid item xs={12} md={5}>
-              <TextField fullWidth id="tourName" label="Tour Name" placeholder="e.g., Philippines Trip 2023" variant="outlined" value={newTourName} onChange={(e) => setNewTourName(e.target.value)} required />
+              <TextField fullWidth label="Tour Name" value={newTourName} onChange={(e) => setNewTourName(e.target.value)} required variant="outlined" />
             </Grid>
             <Grid item xs={12} md={5}>
-              <TextField fullWidth id="baseCurrency" label="Base Currency" placeholder="e.g., USD" variant="outlined" value={newTourCurrency} onChange={(e) => setNewTourCurrency(e.target.value)} required helperText="Enter the 3-letter currency code" />
+              <TextField fullWidth label="Base Currency" value={newTourCurrency} onChange={(e) => setNewTourCurrency(e.target.value)} required variant="outlined" placeholder="3-letter code (e.g., USD)" inputProps={{ maxLength: 3, style: { textTransform: "uppercase" } }} />
             </Grid>
             <Grid item xs={12} md={2}>
-              <Button type="submit" variant="contained" color="primary" fullWidth startIcon={<AddIcon />}>
-                Create Tour
+              <Button type="submit" variant="contained" color="primary" fullWidth startIcon={<AddIcon />} sx={{ height: "56px" }}>
+                CREATE TOUR
               </Button>
             </Grid>
           </Grid>
-        </form>
+        </Box>
       </Paper>
 
       <Paper elevation={2} sx={{ p: 3 }}>

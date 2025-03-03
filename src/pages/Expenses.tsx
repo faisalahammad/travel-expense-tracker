@@ -1,4 +1,4 @@
-import { Add as AddIcon, DateRange as DateIcon, Delete as DeleteIcon, Description as DescriptionIcon, ExpandLess as ExpandLessIcon, ExpandMore as ExpandMoreIcon, AttachMoney as MoneyIcon, Person as PersonIcon } from "@mui/icons-material";
+import { Add as AddIcon, Delete as DeleteIcon, ExpandLess as ExpandLessIcon, ExpandMore as ExpandMoreIcon, Person as PersonIcon } from "@mui/icons-material";
 import {
   Alert,
   Box,
@@ -21,7 +21,6 @@ import {
   MenuItem,
   Paper,
   Select,
-  Slider,
   Stack,
   Table,
   TableBody,
@@ -32,7 +31,7 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { ExpenseSplit } from "../types";
@@ -55,6 +54,7 @@ const Expenses: React.FC = () => {
   const [newExpensePaidBy, setNewExpensePaidBy] = useState("");
   const [newExpenseSplits, setNewExpenseSplits] = useState<ExpenseSplit[]>([]);
   const [splitEqually, setSplitEqually] = useState(true);
+  const [totalAmount, setTotalAmount] = useState(0);
 
   // Redirect if no active tour
   if (!activeTourId) {
@@ -69,93 +69,94 @@ const Expenses: React.FC = () => {
     return null;
   }
 
-  // Initialize form state when needed
-  if (activeTour.travelers.length > 0 && newExpensePaidBy === "") {
-    setNewExpensePaidBy(activeTour.travelers[0].id);
-  }
+  // Initialize splits when expense amount changes
+  useEffect(() => {
+    if (activeTour.travelers.length > 0 && parseFloat(newExpenseAmount) > 0) {
+      const expenseAmount = parseFloat(newExpenseAmount);
+      const equalAmount = expenseAmount / activeTour.travelers.length;
 
-  if (activeTour.currencies.length > 0 && newExpenseCurrency === "") {
-    setNewExpenseCurrency(activeTour.baseCurrencyCode);
-  }
-
-  // Initialize splits when travelers change
-  if (activeTour.travelers.length > 0 && newExpenseSplits.length === 0) {
-    const equalPercentage = 100 / activeTour.travelers.length;
-    const initialSplits = activeTour.travelers.map((traveler) => ({
-      travelerId: traveler.id,
-      amount: 0, // Will be calculated when expense is added
-      percentage: equalPercentage,
-    }));
-    setNewExpenseSplits(initialSplits);
-  }
+      if (splitEqually) {
+        const equalSplits = activeTour.travelers.map((traveler) => ({
+          travelerId: traveler.id,
+          amount: parseFloat(equalAmount.toFixed(2)),
+          percentage: 0,
+        }));
+        setNewExpenseSplits(equalSplits);
+      }
+    }
+  }, [newExpenseAmount, activeTour.travelers, splitEqually]);
 
   const handleAddExpense = (e: React.FormEvent) => {
     e.preventDefault();
 
-    const amount = parseFloat(newExpenseAmount);
+    if (newExpenseDate && newExpenseAmount && newExpenseCurrency && newExpenseDescription && newExpensePaidBy && newExpenseSplits.length > 0) {
+      const amount = parseFloat(newExpenseAmount);
 
-    if (isNaN(amount) || amount <= 0) {
-      alert("Please enter a valid amount.");
-      return;
-    }
+      // Calculate the total split amount to ensure it matches the expense amount
+      const totalSplitAmount = newExpenseSplits.reduce((sum, split) => sum + split.amount, 0);
 
-    if (!newExpensePaidBy) {
-      alert("Please select who paid for this expense.");
-      return;
-    }
+      // Only proceed if the total split amount equals the expense amount
+      if (Math.abs(totalSplitAmount - amount) < 0.01) {
+        // Create the expense with amount-based splits
+        addExpense(activeTourId, {
+          date: newExpenseDate,
+          amount,
+          currencyCode: newExpenseCurrency,
+          description: newExpenseDescription,
+          paidById: newExpensePaidBy,
+          splits: newExpenseSplits,
+        });
 
-    // Calculate split amounts based on percentages
-    const updatedSplits = newExpenseSplits.map((split) => ({
-      ...split,
-      amount: (split.percentage / 100) * amount,
-    }));
-
-    // Verify that splits add up to 100%
-    const totalPercentage = updatedSplits.reduce((sum, split) => sum + split.percentage, 0);
-    if (Math.abs(totalPercentage - 100) > 0.01) {
-      alert("Split percentages must add up to 100%.");
-      return;
-    }
-
-    addExpense(activeTourId, newExpenseDate, amount, newExpenseCurrency, newExpenseDescription, newExpensePaidBy, updatedSplits);
-
-    // Reset form
-    setNewExpenseDescription("");
-    setNewExpenseAmount("");
-    // Keep the date, currency, and paidBy as they are for convenience
-
-    // Reset splits to equal
-    if (activeTour.travelers.length > 0) {
-      const equalPercentage = 100 / activeTour.travelers.length;
-      const initialSplits = activeTour.travelers.map((traveler) => ({
-        travelerId: traveler.id,
-        amount: 0,
-        percentage: equalPercentage,
-      }));
-      setNewExpenseSplits(initialSplits);
-      setSplitEqually(true);
+        // Reset form
+        setNewExpenseDate(new Date().toISOString().split("T")[0]);
+        setNewExpenseAmount("");
+        setNewExpenseCurrency("");
+        setNewExpenseDescription("");
+        setNewExpensePaidBy("");
+        setNewExpenseSplits([]);
+        setSplitEqually(true);
+        setTotalAmount(0);
+      } else {
+        // Show error or adjust splits automatically
+        alert(`The total split amount (${totalSplitAmount.toFixed(2)}) must equal the expense amount (${amount.toFixed(2)})`);
+      }
     }
   };
 
-  const handleSplitPercentageChange = (travelerId: string, percentage: number) => {
-    const updatedSplits = newExpenseSplits.map((split) => (split.travelerId === travelerId ? { ...split, percentage } : split));
+  const handleSplitAmountChange = (travelerId: string, amount: number) => {
+    const updatedSplits = newExpenseSplits.map((split) => (split.travelerId === travelerId ? { ...split, amount, percentage: 0 } : split));
     setNewExpenseSplits(updatedSplits);
 
+    // Check if the total matches the expense amount
+    const totalSplitAmount = updatedSplits.reduce((sum, split) => sum + split.amount, 0);
+    const expenseAmount = parseFloat(newExpenseAmount) || 0;
+
     // Check if splits are equal
-    const equalPercentage = 100 / activeTour.travelers.length;
-    const isEqual = updatedSplits.every((split) => Math.abs(split.percentage - equalPercentage) < 0.01);
+    const equalAmount = expenseAmount / activeTour.travelers.length;
+    const isEqual = updatedSplits.every((split) => Math.abs(split.amount - equalAmount) < 0.01);
     setSplitEqually(isEqual);
   };
 
   const handleSplitEqually = () => {
-    const equalPercentage = 100 / activeTour.travelers.length;
+    const expenseAmount = parseFloat(newExpenseAmount) || 0;
+    const equalAmount = expenseAmount / activeTour.travelers.length;
+
     const equalSplits = activeTour.travelers.map((traveler) => ({
       travelerId: traveler.id,
-      amount: 0, // Will be calculated when expense is added
-      percentage: equalPercentage,
+      amount: parseFloat(equalAmount.toFixed(2)),
+      percentage: 0, // We're not using percentage anymore
     }));
+
     setNewExpenseSplits(equalSplits);
     setSplitEqually(true);
+  };
+
+  const handleExpenseAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newAmount = e.target.value;
+    setNewExpenseAmount(newAmount);
+
+    const expenseAmount = parseFloat(newAmount) || 0;
+    setTotalAmount(expenseAmount);
   };
 
   const handleOpenDeleteDialog = (expenseId: string) => {
@@ -207,69 +208,19 @@ const Expenses: React.FC = () => {
             Add New Expense
           </Typography>
           <Divider sx={{ mb: 3 }} />
-          <form onSubmit={handleAddExpense}>
+          <Box component="form" onSubmit={handleAddExpense}>
             <Grid container spacing={3}>
               <Grid item xs={12} sm={6} md={3}>
-                <TextField
-                  fullWidth
-                  id="expenseDate"
-                  label="Date"
-                  type="date"
-                  value={newExpenseDate}
-                  onChange={(e) => setNewExpenseDate(e.target.value)}
-                  required
-                  InputLabelProps={{ shrink: true }}
-                  InputProps={{
-                    startAdornment: (
-                      <InputAdornment position="start">
-                        <DateIcon color="action" />
-                      </InputAdornment>
-                    ),
-                  }}
-                />
+                <TextField fullWidth label="Date" type="date" value={newExpenseDate} onChange={(e) => setNewExpenseDate(e.target.value)} required InputLabelProps={{ shrink: true }} />
               </Grid>
               <Grid item xs={12} sm={6} md={3}>
-                <TextField
-                  fullWidth
-                  id="expenseDescription"
-                  label="Description"
-                  placeholder="e.g., Dinner at Restaurant"
-                  value={newExpenseDescription}
-                  onChange={(e) => setNewExpenseDescription(e.target.value)}
-                  required
-                  InputProps={{
-                    startAdornment: (
-                      <InputAdornment position="start">
-                        <DescriptionIcon color="action" />
-                      </InputAdornment>
-                    ),
-                  }}
-                />
-              </Grid>
-              <Grid item xs={12} sm={6} md={3}>
-                <TextField
-                  fullWidth
-                  id="expenseAmount"
-                  label="Amount"
-                  type="number"
-                  placeholder="e.g., 50.00"
-                  value={newExpenseAmount}
-                  onChange={(e) => setNewExpenseAmount(e.target.value)}
-                  inputProps={{ min: "0.01", step: "0.01" }}
-                  required
-                  InputProps={{
-                    startAdornment: (
-                      <InputAdornment position="start">
-                        <MoneyIcon color="action" />
-                      </InputAdornment>
-                    ),
-                  }}
-                />
+                <TextField fullWidth label="Amount" type="number" placeholder="e.g., 50.00" value={newExpenseAmount} onChange={handleExpenseAmountChange} inputProps={{ min: "0.01", step: "0.01" }} required />
               </Grid>
               <Grid item xs={12} sm={6} md={3}>
                 <FormControl fullWidth required>
-                  <InputLabel id="currency-label">Currency</InputLabel>
-                  <Select labelId="currency-label" id="expenseCurrency" value={newExpenseCurrency} onChange={(e) => setNewExpenseCurrency(e.target.value)} label="Currency">
+                  <InputLabel id="currency-select-label">Currency</InputLabel>
+                  <Select labelId="currency-select-label" value={newExpenseCurrency} onChange={(e) => setNewExpenseCurrency(e.target.value)} label="Currency">
+                    <MenuItem value={activeTour.baseCurrencyCode}>{activeTour.baseCurrencyCode}</MenuItem>
                     {activeTour.currencies.map((currency) => (
                       <MenuItem key={currency.code} value={currency.code}>
                         {currency.code} - {currency.name}
@@ -303,54 +254,78 @@ const Expenses: React.FC = () => {
               </Grid>
             </Grid>
 
-            <Box sx={{ mt: 4, mb: 3 }}>
+            <Box sx={{ mt: 4 }}>
               <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
-                <Typography variant="subtitle1" fontWeight="bold">
-                  Split
-                </Typography>
-                <Button size="small" onClick={handleSplitEqually} color="primary" variant={splitEqually ? "contained" : "outlined"}>
-                  Split Equally
+                <Typography variant="h6">Split</Typography>
+                <Button variant="contained" color="secondary" onClick={handleSplitEqually} disabled={!newExpenseAmount || parseFloat(newExpenseAmount) <= 0}>
+                  SPLIT EQUALLY
                 </Button>
               </Box>
 
-              <Paper sx={{ p: 3, bgcolor: "background.default" }}>
-                {newExpenseSplits.map((split) => {
-                  const traveler = activeTour.travelers.find((t) => t.id === split.travelerId);
+              <Paper elevation={1} sx={{ p: 3, bgcolor: "background.paper" }}>
+                {activeTour.travelers.length === 0 ? (
+                  <Alert severity="warning">No travelers added yet. Please add travelers first.</Alert>
+                ) : !newExpenseAmount || parseFloat(newExpenseAmount) <= 0 ? (
+                  <Alert severity="info">Enter an expense amount above to split it among travelers.</Alert>
+                ) : (
+                  <>
+                    {activeTour.travelers.map((traveler) => {
+                      const split = newExpenseSplits.find((s) => s.travelerId === traveler.id) || {
+                        travelerId: traveler.id,
+                        amount: 0,
+                        percentage: 0,
+                      };
 
-                  if (!traveler) return null;
+                      return (
+                        <Grid container spacing={2} key={traveler.id} sx={{ mb: 2 }} alignItems="center">
+                          <Grid item xs={12} sm={4} md={3}>
+                            <Typography variant="body1">{traveler.name}</Typography>
+                          </Grid>
+                          <Grid item xs={12} sm={6} md={7}>
+                            <TextField
+                              fullWidth
+                              type="number"
+                              label={`Amount in ${newExpenseCurrency || activeTour.baseCurrencyCode}`}
+                              value={split.amount}
+                              onChange={(e) => handleSplitAmountChange(traveler.id, parseFloat(e.target.value) || 0)}
+                              InputProps={{
+                                startAdornment: <InputAdornment position="start">{newExpenseCurrency || activeTour.baseCurrencyCode}</InputAdornment>,
+                              }}
+                              variant="outlined"
+                              size="small"
+                            />
+                          </Grid>
+                          <Grid item xs={12} sm={2} md={2}>
+                            <Typography variant="body2" color="text.secondary" align="right">
+                              {((split.amount / (parseFloat(newExpenseAmount) || 1)) * 100).toFixed(1)}%
+                            </Typography>
+                          </Grid>
+                        </Grid>
+                      );
+                    })}
 
-                  return (
-                    <Box key={traveler.id} sx={{ mb: 2, display: "flex", alignItems: "center" }}>
-                      <Typography sx={{ width: "30%", flexShrink: 0 }}>{traveler.name}</Typography>
-                      <Box sx={{ width: "70%", display: "flex", alignItems: "center" }}>
-                        <Slider value={split.percentage} onChange={(_, value) => handleSplitPercentageChange(traveler.id, value as number)} min={0} max={100} step={0.01} sx={{ mr: 2, flexGrow: 1 }} />
-                        <TextField
-                          value={split.percentage}
-                          onChange={(e) => {
-                            const value = parseFloat(e.target.value);
-                            if (!isNaN(value)) {
-                              handleSplitPercentageChange(traveler.id, value);
-                            }
-                          }}
-                          type="number"
-                          size="small"
-                          inputProps={{ min: 0, max: 100, step: 0.01 }}
-                          sx={{ width: 80 }}
-                          InputProps={{
-                            endAdornment: <InputAdornment position="end">%</InputAdornment>,
-                          }}
-                        />
-                      </Box>
+                    <Box sx={{ mt: 2, display: "flex", justifyContent: "space-between", borderTop: "1px solid", borderColor: "divider", pt: 2 }}>
+                      <Typography variant="subtitle1">Total Split:</Typography>
+                      <Typography variant="subtitle1" color={Math.abs(newExpenseSplits.reduce((sum, split) => sum + split.amount, 0) - parseFloat(newExpenseAmount || "0")) < 0.01 ? "success.main" : "error.main"}>
+                        {newExpenseCurrency || activeTour.baseCurrencyCode} {newExpenseSplits.reduce((sum, split) => sum + split.amount, 0).toFixed(2)}
+                        {Math.abs(newExpenseSplits.reduce((sum, split) => sum + split.amount, 0) - parseFloat(newExpenseAmount || "0")) >= 0.01 && (
+                          <Typography component="span" variant="caption" color="error.main" sx={{ ml: 1 }}>
+                            (Doesn't match expense amount: {newExpenseCurrency || activeTour.baseCurrencyCode} {parseFloat(newExpenseAmount || "0").toFixed(2)})
+                          </Typography>
+                        )}
+                      </Typography>
                     </Box>
-                  );
-                })}
+                  </>
+                )}
               </Paper>
             </Box>
 
-            <Button type="submit" variant="contained" color="primary" startIcon={<AddIcon />} size="large">
-              Add Expense
-            </Button>
-          </form>
+            <Grid item xs={12}>
+              <Button type="submit" variant="contained" color="primary" startIcon={<AddIcon />} sx={{ mt: 2 }}>
+                ADD EXPENSE
+              </Button>
+            </Grid>
+          </Box>
         </Paper>
       )}
 

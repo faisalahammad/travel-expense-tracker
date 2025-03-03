@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
-import { AppState, Currency, Expense, ExpenseSplit, Tour, Traveler } from "../types";
+import { AppState, Currency, Expense, Tour, Traveler } from "../types";
 import { loadFromLocalStorage, parseShareableLink, saveToLocalStorage } from "../utils";
 
 interface AppContextType {
@@ -15,7 +15,7 @@ interface AppContextType {
   addCurrency: (tourId: string, code: string, name: string, exchangeRate: number) => void;
   updateCurrency: (tourId: string, currencyCode: string, updates: Partial<Currency>) => void;
   removeCurrency: (tourId: string, currencyCode: string) => void;
-  addExpense: (tourId: string, date: string, amount: number, currencyCode: string, description: string, paidById: string, splits: ExpenseSplit[]) => void;
+  addExpense: (tourId: string, expenseData: Omit<Expense, "id">) => void;
   updateExpense: (tourId: string, expenseId: string, updates: Partial<Expense>) => void;
   removeExpense: (tourId: string, expenseId: string) => void;
   importTourFromLink: (url: string) => boolean;
@@ -285,19 +285,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }));
   };
 
-  const addExpense = (tourId: string, date: string, amount: number, currencyCode: string, description: string, paidById: string, splits: ExpenseSplit[]) => {
+  const addExpense = (tourId: string, expenseData: Omit<Expense, "id">) => {
     setState((prevState) => ({
       ...prevState,
       tours: prevState.tours.map((tour) => {
         if (tour.id === tourId) {
           const newExpense: Expense = {
             id: uuidv4(),
-            date,
-            amount,
-            currencyCode,
-            description,
-            paidById,
-            splits,
+            ...expenseData,
           };
 
           return {
