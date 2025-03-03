@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
-import { AppState, Currency, Expense, Tour, Traveler } from "../types";
+import { AppState, Currency, Expense, PaymentRecord, Tour, Traveler } from "../types";
 import { loadFromLocalStorage, parseShareableLink, saveToLocalStorage } from "../utils";
 
 interface AppContextType {
@@ -18,6 +18,8 @@ interface AppContextType {
   addExpense: (tourId: string, expenseData: Omit<Expense, "id">) => void;
   updateExpense: (tourId: string, expenseId: string, updates: Partial<Expense>) => void;
   removeExpense: (tourId: string, expenseId: string) => void;
+  addPayment: (tourId: string, paymentData: Omit<PaymentRecord, "id">) => void;
+  removePayment: (tourId: string, paymentId: string) => void;
   importTourFromLink: (url: string) => boolean;
 }
 
@@ -72,6 +74,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         },
       ],
       expenses: [],
+      payments: [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -338,6 +341,43 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }));
   };
 
+  const addPayment = (tourId: string, paymentData: Omit<PaymentRecord, "id">) => {
+    setState((prevState) => ({
+      ...prevState,
+      tours: prevState.tours.map((tour) => {
+        if (tour.id === tourId) {
+          const newPayment: PaymentRecord = {
+            id: uuidv4(),
+            ...paymentData,
+          };
+
+          return {
+            ...tour,
+            payments: tour.payments ? [...tour.payments, newPayment] : [newPayment],
+            updatedAt: new Date().toISOString(),
+          };
+        }
+        return tour;
+      }),
+    }));
+  };
+
+  const removePayment = (tourId: string, paymentId: string) => {
+    setState((prevState) => ({
+      ...prevState,
+      tours: prevState.tours.map((tour) => {
+        if (tour.id === tourId) {
+          return {
+            ...tour,
+            payments: tour.payments ? tour.payments.filter((payment) => payment.id !== paymentId) : [],
+            updatedAt: new Date().toISOString(),
+          };
+        }
+        return tour;
+      }),
+    }));
+  };
+
   const importTourFromLink = (url: string): boolean => {
     try {
       const tourData = parseShareableLink(url);
@@ -387,6 +427,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addExpense,
     updateExpense,
     removeExpense,
+    addPayment,
+    removePayment,
     importTourFromLink,
   };
 

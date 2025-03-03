@@ -35,7 +35,7 @@ export const convertCurrency = (amount: number, fromCurrencyCode: string, toCurr
 
 // Calculate settlements (who owes whom)
 export const calculateSettlements = (tour: Tour): Settlement[] => {
-  const { expenses, travelers, baseCurrencyCode, currencies } = tour;
+  const { expenses, travelers, baseCurrencyCode, currencies, payments = [] } = tour;
 
   // Initialize balances for each traveler
   const balances: Record<string, number> = {};
@@ -60,6 +60,22 @@ export const calculateSettlements = (tour: Tour): Settlement[] => {
       balances[split.travelerId] -= splitAmountInBaseCurrency;
     });
   });
+
+  // Apply payments to balances (if payments exist)
+  if (payments && payments.length > 0) {
+    payments.forEach((payment) => {
+      const { fromTravelerId, toTravelerId, amount, currencyCode } = payment;
+
+      // Convert payment amount to base currency
+      const amountInBaseCurrency = convertCurrency(amount, currencyCode, baseCurrencyCode, currencies);
+
+      // Subtract from the payer's balance
+      balances[fromTravelerId] -= amountInBaseCurrency;
+
+      // Add to the receiver's balance
+      balances[toTravelerId] += amountInBaseCurrency;
+    });
+  }
 
   // Create a list of creditors (positive balance) and debtors (negative balance)
   const creditors: { id: string; amount: number }[] = [];

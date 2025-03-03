@@ -3,14 +3,14 @@ import { Settlement, Tour } from "../types";
 import { getTravelerName } from "./index";
 
 export const exportTourToExcel = (tour: Tour): void => {
-  const { name, travelers, expenses, currencies, baseCurrencyCode } = tour;
+  const { name, travelers, expenses, currencies, baseCurrencyCode, payments } = tour;
 
   // Create workbook
   const wb = XLSX.utils.book_new();
 
   // Create travelers sheet
   const travelersData = travelers.map((traveler) => ({
-    "Traveler ID": traveler.id,
+    "Traveler ID": traveler.id.substring(0, 8), // Use shorter ID
     Name: traveler.name,
   }));
 
@@ -29,7 +29,7 @@ export const exportTourToExcel = (tour: Tour): void => {
 
   // Create expenses sheet
   const expensesData = expenses.map((expense) => ({
-    "Expense ID": expense.id,
+    "Expense ID": expense.id.substring(0, 8), // Use shorter ID
     Date: expense.date,
     Description: expense.description,
     Amount: expense.amount,
@@ -45,18 +45,36 @@ export const exportTourToExcel = (tour: Tour): void => {
   expenses.forEach((expense) => {
     expense.splits.forEach((split) => {
       splitsData.push({
-        "Expense ID": expense.id,
+        "Expense ID": expense.id.substring(0, 8), // Use shorter ID
         Description: expense.description,
         Traveler: getTravelerName(split.travelerId, travelers),
-        Amount: (split.percentage / 100) * expense.amount,
+        Amount: split.amount, // Use the actual split amount
         Percentage: split.percentage,
         Currency: expense.currencyCode,
+        "Paid By": getTravelerName(expense.paidById, travelers),
       });
     });
   });
 
   const splitsSheet = XLSX.utils.json_to_sheet(splitsData);
   XLSX.utils.book_append_sheet(wb, splitsSheet, "Expense Splits");
+
+  // Create payments sheet if there are any payments
+  if (payments && payments.length > 0) {
+    const paymentsData = payments.map((payment) => ({
+      "Payment ID": payment.id.substring(0, 8), // Use shorter ID
+      Date: payment.date,
+      From: getTravelerName(payment.fromTravelerId, travelers),
+      To: getTravelerName(payment.toTravelerId, travelers),
+      Amount: payment.amount,
+      Currency: payment.currencyCode,
+      Method: payment.method,
+      Notes: payment.notes || "",
+    }));
+
+    const paymentsSheet = XLSX.utils.json_to_sheet(paymentsData);
+    XLSX.utils.book_append_sheet(wb, paymentsSheet, "Payments");
+  }
 
   // Create settlements sheet
   const settlements = calculateSettlements(tour);
@@ -76,7 +94,7 @@ export const exportTourToExcel = (tour: Tour): void => {
 
 // Helper function to calculate settlements for Excel export
 const calculateSettlements = (tour: Tour): Settlement[] => {
-  const { expenses, travelers, baseCurrencyCode, currencies } = tour;
+  const { expenses, travelers, baseCurrencyCode, currencies, payments } = tour;
 
   // Initialize balances for each traveler
   const balances: Record<string, number> = {};
@@ -102,10 +120,40 @@ const calculateSettlements = (tour: Tour): Settlement[] => {
 
     // Subtract each split from the respective traveler's balance
     splits.forEach((split) => {
-      const splitAmountInBaseCurrency = (split.percentage / 100) * amountInBaseCurrency;
+      // Convert split amount to base currency if needed
+      let splitAmountInBaseCurrency = split.amount;
+      if (currencyCode !== baseCurrencyCode) {
+        const currency = currencies.find((c) => c.code === currencyCode);
+        if (currency) {
+          splitAmountInBaseCurrency = split.amount / currency.exchangeRate;
+        }
+      }
+
       balances[split.travelerId] -= splitAmountInBaseCurrency;
     });
   });
+
+  // Apply payments to balances if there are any
+  if (payments && payments.length > 0) {
+    payments.forEach((payment) => {
+      const { fromTravelerId, toTravelerId, amount, currencyCode } = payment;
+
+      // Convert payment amount to base currency if needed
+      let amountInBaseCurrency = amount;
+      if (currencyCode !== baseCurrencyCode) {
+        const currency = currencies.find((c) => c.code === currencyCode);
+        if (currency) {
+          amountInBaseCurrency = amount / currency.exchangeRate;
+        }
+      }
+
+      // Subtract from the payer's balance
+      balances[fromTravelerId] -= amountInBaseCurrency;
+
+      // Add to the receiver's balance
+      balances[toTravelerId] += amountInBaseCurrency;
+    });
+  }
 
   // Create a list of creditors (positive balance) and debtors (negative balance)
   const creditors: { id: string; amount: number }[] = [];

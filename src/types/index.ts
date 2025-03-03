@@ -32,6 +32,17 @@ export interface Settlement {
   currencyCode: string;
 }
 
+export interface PaymentRecord {
+  id: string;
+  fromTravelerId: string;
+  toTravelerId: string;
+  amount: number;
+  currencyCode: string;
+  date: string;
+  method: string;
+  notes?: string;
+}
+
 export interface Tour {
   id: string;
   name: string;
@@ -39,6 +50,7 @@ export interface Tour {
   travelers: Traveler[];
   currencies: Currency[];
   expenses: Expense[];
+  payments: PaymentRecord[];
   createdAt: string;
   updatedAt: string;
 }

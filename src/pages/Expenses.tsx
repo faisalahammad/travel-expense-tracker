@@ -1,4 +1,4 @@
-import { Add as AddIcon, Delete as DeleteIcon, ExpandLess as ExpandLessIcon, ExpandMore as ExpandMoreIcon, Person as PersonIcon } from "@mui/icons-material";
+import { Add as AddIcon, Delete as DeleteIcon, ExpandLess as ExpandLessIcon, ExpandMore as ExpandMoreIcon, FilterList as FilterIcon, Person as PersonIcon, Search as SearchIcon } from "@mui/icons-material";
 import {
   Alert,
   Box,
@@ -45,6 +45,13 @@ const Expenses: React.FC = () => {
   const [expandedExpenseId, setExpandedExpenseId] = useState<string | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [expenseToDelete, setExpenseToDelete] = useState<string | null>(null);
+
+  // Search and filter state
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filterPaidBy, setFilterPaidBy] = useState("");
+  const [filterDateFrom, setFilterDateFrom] = useState("");
+  const [filterDateTo, setFilterDateTo] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
 
   // Form state for new expense
   const [newExpenseDate, setNewExpenseDate] = useState(new Date().toISOString().split("T")[0]);
@@ -180,6 +187,31 @@ const Expenses: React.FC = () => {
   const toggleExpenseDetails = (expenseId: string) => {
     setExpandedExpenseId(expandedExpenseId === expenseId ? null : expenseId);
   };
+
+  // Format date as DD/MM/YYYY
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+  };
+
+  // Filter expenses based on search term and filters
+  const filteredExpenses = activeTour.expenses.filter((expense) => {
+    const matchesSearch = expense.description.toLowerCase().includes(searchTerm.toLowerCase());
+
+    const matchesPaidBy = filterPaidBy ? expense.paidById === filterPaidBy : true;
+
+    const expenseDate = new Date(expense.date);
+    const fromDate = filterDateFrom ? new Date(filterDateFrom) : null;
+    const toDate = filterDateTo ? new Date(filterDateTo) : null;
+
+    const matchesDateRange = (!fromDate || expenseDate >= fromDate) && (!toDate || expenseDate <= toDate);
+
+    return matchesSearch && matchesPaidBy && matchesDateRange;
+  });
 
   return (
     <>
@@ -333,32 +365,98 @@ const Expenses: React.FC = () => {
       )}
 
       <Paper elevation={2} sx={{ p: 3 }}>
-        <Typography variant="h5" component="h3" gutterBottom>
-          Expenses
-        </Typography>
+        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
+          <Typography variant="h5" component="h3" gutterBottom sx={{ mb: 0 }}>
+            Expenses
+          </Typography>
+          <Box sx={{ display: "flex", gap: 1 }}>
+            <Button startIcon={<FilterIcon />} variant="outlined" size="small" onClick={() => setShowFilters(!showFilters)}>
+              Filters
+            </Button>
+          </Box>
+        </Box>
+
+        <Collapse in={showFilters}>
+          <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
+            <Grid container spacing={2} alignItems="center">
+              <Grid item xs={12} sm={6} md={3}>
+                <TextField
+                  fullWidth
+                  label="Search"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Search expenses..."
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <SearchIcon />
+                      </InputAdornment>
+                    ),
+                  }}
+                  size="small"
+                />
+              </Grid>
+              <Grid item xs={12} sm={6} md={3}>
+                <FormControl fullWidth size="small">
+                  <InputLabel id="filter-paid-by-label">Paid By</InputLabel>
+                  <Select labelId="filter-paid-by-label" value={filterPaidBy} onChange={(e) => setFilterPaidBy(e.target.value)} label="Paid By">
+                    <MenuItem value="">All</MenuItem>
+                    {activeTour.travelers.map((traveler) => (
+                      <MenuItem key={traveler.id} value={traveler.id}>
+                        {traveler.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12} sm={6} md={3}>
+                <TextField fullWidth label="From Date" type="date" value={filterDateFrom} onChange={(e) => setFilterDateFrom(e.target.value)} InputLabelProps={{ shrink: true }} size="small" />
+              </Grid>
+              <Grid item xs={12} sm={6} md={3}>
+                <TextField fullWidth label="To Date" type="date" value={filterDateTo} onChange={(e) => setFilterDateTo(e.target.value)} InputLabelProps={{ shrink: true }} size="small" />
+              </Grid>
+              <Grid item xs={12}>
+                <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 1 }}>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    onClick={() => {
+                      setSearchTerm("");
+                      setFilterPaidBy("");
+                      setFilterDateFrom("");
+                      setFilterDateTo("");
+                    }}
+                  >
+                    Clear Filters
+                  </Button>
+                </Box>
+              </Grid>
+            </Grid>
+          </Paper>
+        </Collapse>
+
         <Divider sx={{ mb: 3 }} />
 
         {activeTour.expenses.length === 0 ? (
           <Alert severity="info">No expenses added yet.</Alert>
+        ) : filteredExpenses.length === 0 ? (
+          <Alert severity="info">No expenses match your search criteria.</Alert>
         ) : (
           <Stack spacing={2}>
-            {activeTour.expenses
+            {filteredExpenses
               .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
               .map((expense) => {
                 const paidBy = activeTour.travelers.find((t) => t.id === expense.paidById);
                 const currency = activeTour.currencies.find((c) => c.code === expense.currencyCode);
 
                 return (
-                  <Card key={expense.id} variant="outlined">
+                  <Card key={expense.id} variant="outlined" sx={{ borderRadius: 2, overflow: "hidden" }}>
                     <CardContent sx={{ pb: 1 }}>
                       <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }} onClick={() => toggleExpenseDetails(expense.id)}>
                         <Box>
                           <Typography variant="h6">{expense.description}</Typography>
                           <Typography variant="body2" color="text.secondary">
-                            {new Date(expense.date).toLocaleDateString()}
-                          </Typography>
-                          <Typography variant="body2" color="text.secondary">
-                            Paid by: {paidBy?.name || "Unknown"}
+                            {formatDate(expense.date)} • Paid by: {paidBy?.name || "Unknown"}
                           </Typography>
                         </Box>
                         <Box sx={{ display: "flex", alignItems: "center" }}>
@@ -370,9 +468,6 @@ const Expenses: React.FC = () => {
                       </Box>
                       <Collapse in={expandedExpenseId === expense.id}>
                         <Box sx={{ mt: 2 }}>
-                          <Typography variant="body2">
-                            <strong>Paid by:</strong> {paidBy?.name || "Unknown"}
-                          </Typography>
                           <Typography variant="body2">
                             <strong>Currency:</strong> {currency?.name || expense.currencyCode}
                           </Typography>
