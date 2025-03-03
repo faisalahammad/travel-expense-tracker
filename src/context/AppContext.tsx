@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
 import { AppState, Currency, Expense, PaymentRecord, Tour, Traveler } from "../types";
-import { loadFromLocalStorage, parseShareableLink, saveToLocalStorage } from "../utils";
+import { parseShareableLink } from "../utils";
+import { deleteTour as deleteSupabaseTour, loadAppState, saveAppState } from "../utils/supabase";
 
 interface AppContextType {
   state: AppState;
@@ -25,40 +26,66 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-const LOCAL_STORAGE_KEY = "travel-expense-tracker";
-
 const initialState: AppState = {
   tours: [],
   activeTourId: null,
 };
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [state, setState] = useState<AppState>(() => {
-    // Check URL for tour data
-    const urlParams = new URLSearchParams(window.location.search);
-    const tourParam = urlParams.get("tour");
+  const [state, setState] = useState<AppState>(initialState);
+  const [isLoading, setIsLoading] = useState(true);
 
-    if (tourParam) {
-      try {
-        const tourData = JSON.parse(decodeURIComponent(tourParam)) as Tour;
-        const initialState: AppState = {
-          tours: [tourData],
-          activeTourId: tourData.id,
-        };
-        return initialState;
-      } catch (error) {
-        console.error("Failed to parse tour data from URL", error);
-      }
-    }
-
-    // Load from localStorage if no tour data in URL
-    return loadFromLocalStorage<AppState>(LOCAL_STORAGE_KEY, initialState);
-  });
-
-  // Save state to localStorage whenever it changes
+  // Load initial state from Supabase
   useEffect(() => {
-    saveToLocalStorage(LOCAL_STORAGE_KEY, state);
-  }, [state]);
+    const loadInitialState = async () => {
+      try {
+        // Check URL for tour data
+        const urlParams = new URLSearchParams(window.location.search);
+        const tourParam = urlParams.get("tour");
+
+        if (tourParam) {
+          try {
+            const tourData = JSON.parse(decodeURIComponent(tourParam)) as Tour;
+            const initialState: AppState = {
+              tours: [tourData],
+              activeTourId: tourData.id,
+            };
+            setState(initialState);
+          } catch (error) {
+            console.error("Failed to parse tour data from URL", error);
+            // Fall back to loading from Supabase
+            const appState = await loadAppState(initialState);
+            setState(appState);
+          }
+        } else {
+          // Load from Supabase if no tour data in URL
+          const appState = await loadAppState(initialState);
+          setState(appState);
+        }
+      } catch (error) {
+        console.error("Failed to load initial state:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadInitialState();
+  }, []);
+
+  // Save state to Supabase whenever it changes
+  useEffect(() => {
+    if (!isLoading) {
+      const saveStateToSupabase = async () => {
+        try {
+          await saveAppState(state);
+        } catch (error) {
+          console.error("Failed to save state to Supabase:", error);
+        }
+      };
+
+      saveStateToSupabase();
+    }
+  }, [state, isLoading]);
 
   const createTour = (name: string, baseCurrencyCode: string) => {
     const newTour: Tour = {
@@ -101,21 +128,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }));
   };
 
-  const deleteTour = (tourId: string) => {
-    setState((prevState) => {
-      const newTours = prevState.tours.filter((tour) => tour.id !== tourId);
-      let newActiveTourId = prevState.activeTourId;
+  const deleteTour = async (tourId: string) => {
+    try {
+      // Delete from Supabase first
+      await deleteSupabaseTour(tourId);
 
-      if (prevState.activeTourId === tourId) {
-        newActiveTourId = newTours.length > 0 ? newTours[0].id : null;
-      }
+      // Then update local state
+      setState((prevState) => {
+        const newTours = prevState.tours.filter((tour) => tour.id !== tourId);
+        let newActiveTourId = prevState.activeTourId;
 
-      return {
-        ...prevState,
-        tours: newTours,
-        activeTourId: newActiveTourId,
-      };
-    });
+        if (prevState.activeTourId === tourId) {
+          newActiveTourId = newTours.length > 0 ? newTours[0].id : null;
+        }
+
+        return {
+          ...prevState,
+          tours: newTours,
+          activeTourId: newActiveTourId,
+        };
+      });
+    } catch (error) {
+      console.error(`Failed to delete tour ${tourId}:`, error);
+    }
   };
 
   const setActiveTour = (tourId: string | null) => {
@@ -265,21 +300,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ...prevState,
       tours: prevState.tours.map((tour) => {
         if (tour.id === tourId) {
-          // Don't remove base currency
+          // Check if it's the base currency
           if (currencyCode === tour.baseCurrencyCode) {
+            // Can't remove base currency
             return tour;
           }
 
-          // Remove currency
-          const updatedCurrencies = tour.currencies.filter((currency) => currency.code !== currencyCode);
-
-          // Remove expenses in this currency
-          const updatedExpenses = tour.expenses.filter((expense) => expense.currencyCode !== currencyCode);
+          // Check if there are expenses using this currency
+          const currencyInUse = tour.expenses.some((expense) => expense.currencyCode === currencyCode);
+          if (currencyInUse) {
+            // Can't remove currency in use
+            return tour;
+          }
 
           return {
             ...tour,
-            currencies: updatedCurrencies,
-            expenses: updatedExpenses,
+            currencies: tour.currencies.filter((currency) => currency.code !== currencyCode),
             updatedAt: new Date().toISOString(),
           };
         }
@@ -353,7 +389,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
           return {
             ...tour,
-            payments: tour.payments ? [...tour.payments, newPayment] : [newPayment],
+            payments: [...tour.payments, newPayment],
             updatedAt: new Date().toISOString(),
           };
         }
@@ -369,7 +405,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (tour.id === tourId) {
           return {
             ...tour,
-            payments: tour.payments ? tour.payments.filter((payment) => payment.id !== paymentId) : [],
+            payments: tour.payments.filter((payment) => payment.id !== paymentId),
             updatedAt: new Date().toISOString(),
           };
         }
@@ -381,29 +417,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const importTourFromLink = (url: string): boolean => {
     try {
       const tourData = parseShareableLink(url);
-
       if (!tourData) {
         return false;
       }
 
       // Check if tour with same ID already exists
       const tourExists = state.tours.some((tour) => tour.id === tourData.id);
-
       if (tourExists) {
-        // Update existing tour
-        setState((prevState) => ({
-          ...prevState,
-          tours: prevState.tours.map((tour) => (tour.id === tourData.id ? { ...tourData } : tour)),
-          activeTourId: tourData.id,
-        }));
-      } else {
-        // Add new tour
-        setState((prevState) => ({
-          ...prevState,
-          tours: [...prevState.tours, tourData],
-          activeTourId: tourData.id,
-        }));
+        // Generate a new ID for the imported tour
+        tourData.id = uuidv4();
       }
+
+      setState((prevState) => ({
+        ...prevState,
+        tours: [...prevState.tours, tourData],
+        activeTourId: tourData.id,
+      }));
 
       return true;
     } catch (error) {
@@ -412,33 +441,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const contextValue: AppContextType = {
-    state,
-    createTour,
-    updateTour,
-    deleteTour,
-    setActiveTour,
-    addTraveler,
-    updateTraveler,
-    removeTraveler,
-    addCurrency,
-    updateCurrency,
-    removeCurrency,
-    addExpense,
-    updateExpense,
-    removeExpense,
-    addPayment,
-    removePayment,
-    importTourFromLink,
-  };
+  if (isLoading) {
+    return <div>Loading...</div>;
+  }
 
-  return <AppContext.Provider value={contextValue}>{children}</AppContext.Provider>;
+  return (
+    <AppContext.Provider
+      value={{
+        state,
+        createTour,
+        updateTour,
+        deleteTour,
+        setActiveTour,
+        addTraveler,
+        updateTraveler,
+        removeTraveler,
+        addCurrency,
+        updateCurrency,
+        removeCurrency,
+        addExpense,
+        updateExpense,
+        removeExpense,
+        addPayment,
+        removePayment,
+        importTourFromLink,
+      }}
+    >
+      {children}
+    </AppContext.Provider>
+  );
 };
 
-export const useApp = (): AppContextType => {
+export const useAppContext = (): AppContextType => {
   const context = useContext(AppContext);
   if (!context) {
-    throw new Error("useApp must be used within an AppProvider");
+    throw new Error("useAppContext must be used within an AppProvider");
   }
   return context;
 };

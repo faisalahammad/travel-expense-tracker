@@ -4,7 +4,7 @@ import { getTravelerName } from "./index";
 import { calculateSettlements } from "./settlementCalculator";
 
 export const exportTourToExcel = (tour: Tour): void => {
-  const { name, travelers, expenses, currencies, baseCurrencyCode, payments } = tour;
+  const { name, travelers, expenses, currencies, payments } = tour;
 
   // Create workbook
   const wb = XLSX.utils.book_new();

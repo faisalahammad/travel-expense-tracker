@@ -33,12 +33,12 @@ import {
 } from "@mui/material";
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useApp } from "../context/AppContext";
+import { useAppContext } from "../context/AppContext";
 import { Expense, ExpenseSplit } from "../types";
 import { formatCurrency, getTravelerName } from "../utils";
 
 const Expenses: React.FC = () => {
-  const { state, addExpense, updateExpense, removeExpense } = useApp();
+  const { state, addExpense, updateExpense, removeExpense } = useAppContext();
   const { tours, activeTourId } = state;
   const navigate = useNavigate();
 
@@ -73,7 +73,7 @@ const Expenses: React.FC = () => {
     return null;
   }
 
-  const activeTour = tours.find((tour) => tour.id === activeTourId);
+  const activeTour = tours.find((tour: any) => tour.id === activeTourId);
 
   if (!activeTour) {
     navigate("/");
@@ -84,17 +84,16 @@ const Expenses: React.FC = () => {
   useEffect(() => {
     if (activeTour.travelers.length > 0 && parseFloat(newExpenseAmount) > 0) {
       const expenseAmount = parseFloat(newExpenseAmount);
-      const equalAmount = expenseAmount / activeTour.travelers.length;
 
       if (splitEqually) {
-        const equalSplits = activeTour.travelers.map((traveler) => ({
+        const equalSplits = activeTour.travelers.map((traveler: any) => ({
           travelerId: traveler.id,
           amount: parseFloat((expenseAmount / activeTour.travelers.length).toFixed(2)),
           percentage: 0,
         }));
 
         // Adjust the last split to account for rounding errors
-        const totalSplitAmount = equalSplits.reduce((sum, split) => sum + split.amount, 0);
+        const totalSplitAmount = equalSplits.reduce((sum: number, split: any) => sum + split.amount, 0);
         if (totalSplitAmount !== expenseAmount && equalSplits.length > 0) {
           const diff = expenseAmount - totalSplitAmount;
           equalSplits[equalSplits.length - 1].amount = parseFloat((equalSplits[equalSplits.length - 1].amount + diff).toFixed(2));
@@ -125,7 +124,7 @@ const Expenses: React.FC = () => {
       const amount = parseFloat(newExpenseAmount);
 
       // Calculate the total split amount to ensure it matches the expense amount
-      const totalSplitAmount = newExpenseSplits.reduce((sum, split) => sum + split.amount, 0);
+      const totalSplitAmount = newExpenseSplits.reduce((sum: number, split: any) => sum + split.amount, 0);
 
       // Only proceed if the total split amount equals the expense amount
       if (Math.abs(totalSplitAmount - amount) < 0.01) {
@@ -182,18 +181,18 @@ const Expenses: React.FC = () => {
 
   const handleSplitAmountChange = (travelerId: string, amount: number) => {
     // Get the current split for this traveler
-    const currentSplit = newExpenseSplits.find((split) => split.travelerId === travelerId);
+    const currentSplit = newExpenseSplits.find((split: any) => split.travelerId === travelerId);
 
     // If the amount is 0, we're effectively unchecking this traveler
     const isUnchecking = amount === 0 && currentSplit && currentSplit.amount > 0;
 
     // Update the split for this traveler
-    const updatedSplits = newExpenseSplits.map((split) => (split.travelerId === travelerId ? { ...split, amount, percentage: 0 } : split));
+    const updatedSplits = newExpenseSplits.map((split: any) => (split.travelerId === travelerId ? { ...split, amount, percentage: 0 } : split));
 
     // If we're unchecking a traveler, redistribute their amount to other travelers with non-zero amounts
     if (isUnchecking) {
       const expenseAmount = parseFloat(newExpenseAmount) || 0;
-      const activeSplits = updatedSplits.filter((split) => split.travelerId !== travelerId && split.amount > 0);
+      const activeSplits = updatedSplits.filter((split: any) => split.travelerId !== travelerId && split.amount > 0);
 
       if (activeSplits.length > 0) {
         // Calculate how much to redistribute
@@ -201,16 +200,16 @@ const Expenses: React.FC = () => {
         const amountPerActiveSplit = amountToRedistribute / activeSplits.length;
 
         // Redistribute the amount
-        updatedSplits.forEach((split) => {
+        updatedSplits.forEach((split: any) => {
           if (split.travelerId !== travelerId && split.amount > 0) {
             split.amount = parseFloat((split.amount + amountPerActiveSplit).toFixed(2));
           }
         });
 
         // Adjust the last active split to account for rounding errors
-        const totalSplitAmount = updatedSplits.reduce((sum, split) => sum + split.amount, 0);
+        const totalSplitAmount = updatedSplits.reduce((sum: number, split: any) => sum + split.amount, 0);
         if (Math.abs(totalSplitAmount - expenseAmount) > 0.01) {
-          const lastActiveSplit = updatedSplits.filter((split) => split.amount > 0).pop();
+          const lastActiveSplit = updatedSplits.filter((split: any) => split.amount > 0).pop();
           if (lastActiveSplit) {
             lastActiveSplit.amount = parseFloat((lastActiveSplit.amount + (expenseAmount - totalSplitAmount)).toFixed(2));
           }
@@ -219,7 +218,7 @@ const Expenses: React.FC = () => {
     }
 
     setNewExpenseSplits(updatedSplits);
-    setTotalAmount(updatedSplits.reduce((sum, split) => sum + split.amount, 0));
+    setTotalAmount(updatedSplits.reduce((sum: number, split: any) => sum + split.amount, 0));
   };
 
   const handleSetEqualSplits = () => {
@@ -228,14 +227,14 @@ const Expenses: React.FC = () => {
 
     if (activeTravelers.length > 0 && expenseAmount > 0) {
       const equalAmount = parseFloat((expenseAmount / activeTravelers.length).toFixed(2));
-      const equalSplits = activeTravelers.map((traveler) => ({
+      const equalSplits = activeTravelers.map((traveler: any) => ({
         travelerId: traveler.id,
         amount: equalAmount,
         percentage: 0,
       }));
 
       // Adjust the last split to account for rounding errors
-      const totalSplitAmount = equalSplits.reduce((sum, split) => sum + split.amount, 0);
+      const totalSplitAmount = equalSplits.reduce((sum: number, split: any) => sum + split.amount, 0);
       if (Math.abs(totalSplitAmount - expenseAmount) > 0.01 && equalSplits.length > 0) {
         equalSplits[equalSplits.length - 1].amount = parseFloat((equalSplits[equalSplits.length - 1].amount + (expenseAmount - totalSplitAmount)).toFixed(2));
       }
@@ -268,7 +267,7 @@ const Expenses: React.FC = () => {
   };
 
   // Filter expenses based on search term and filters
-  const filteredExpenses = activeTour.expenses.filter((expense) => {
+  const filteredExpenses = activeTour.expenses.filter((expense: any) => {
     // Search term filter
     const matchesSearch = expense.description.toLowerCase().includes(searchTerm.toLowerCase());
 
@@ -313,7 +312,7 @@ const Expenses: React.FC = () => {
                 <InputLabel id="currency-label">Currency</InputLabel>
                 <Select labelId="currency-label" value={newExpenseCurrency} onChange={(e) => setNewExpenseCurrency(e.target.value)} label="Currency">
                   <MenuItem value={activeTour.baseCurrencyCode}>{activeTour.baseCurrencyCode}</MenuItem>
-                  {activeTour.currencies.map((currency) => (
+                  {activeTour.currencies.map((currency: any) => (
                     <MenuItem key={currency.code} value={currency.code}>
                       {currency.code} - {currency.name}
                     </MenuItem>
@@ -325,7 +324,7 @@ const Expenses: React.FC = () => {
               <FormControl fullWidth required>
                 <InputLabel id="paid-by-label">Paid By</InputLabel>
                 <Select labelId="paid-by-label" value={newExpensePaidBy} onChange={(e) => setNewExpensePaidBy(e.target.value)} label="Paid By">
-                  {activeTour.travelers.map((traveler) => (
+                  {activeTour.travelers.map((traveler: any) => (
                     <MenuItem key={traveler.id} value={traveler.id}>
                       {traveler.name}
                     </MenuItem>
@@ -357,8 +356,8 @@ const Expenses: React.FC = () => {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {activeTour.travelers.map((traveler) => {
-                      const split = newExpenseSplits.find((s) => s.travelerId === traveler.id);
+                    {activeTour.travelers.map((traveler: any) => {
+                      const split = newExpenseSplits.find((s: any) => s.travelerId === traveler.id);
                       const amount = split ? split.amount : 0;
 
                       return (
@@ -420,7 +419,7 @@ const Expenses: React.FC = () => {
                 <InputLabel id="filter-paid-by-label">Paid By</InputLabel>
                 <Select labelId="filter-paid-by-label" value={filterPaidBy} onChange={(e) => setFilterPaidBy(e.target.value)} label="Paid By">
                   <MenuItem value="">All</MenuItem>
-                  {activeTour.travelers.map((traveler) => (
+                  {activeTour.travelers.map((traveler: any) => (
                     <MenuItem key={traveler.id} value={traveler.id}>
                       {traveler.name}
                     </MenuItem>
@@ -443,8 +442,8 @@ const Expenses: React.FC = () => {
       ) : (
         <Stack spacing={2}>
           {filteredExpenses
-            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-            .map((expense) => (
+            .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
+            .map((expense: any) => (
               <Card key={expense.id} variant="outlined">
                 <CardContent sx={{ pb: 1 }}>
                   <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
@@ -490,8 +489,8 @@ const Expenses: React.FC = () => {
                         </TableHead>
                         <TableBody>
                           {expense.splits
-                            .filter((split) => split.amount > 0) // Only show travelers with non-zero amounts
-                            .map((split) => (
+                            .filter((split: any) => split.amount > 0) // Only show travelers with non-zero amounts
+                            .map((split: any) => (
                               <TableRow key={split.travelerId}>
                                 <TableCell>{getTravelerName(split.travelerId, activeTour.travelers)}</TableCell>
                                 <TableCell align="right">{formatCurrency(split.amount, expense.currencyCode)}</TableCell>

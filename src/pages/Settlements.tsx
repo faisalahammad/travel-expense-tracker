@@ -31,13 +31,13 @@ import {
 } from "@mui/material";
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useApp } from "../context/AppContext";
+import { useAppContext } from "../context/AppContext";
 import { formatCurrency, getTravelerName } from "../utils";
 import { exportTourToExcel } from "../utils/excelExport";
-import { calculateBalances, calculateSettlements } from "../utils/settlementCalculator";
+import { calculateSettlements } from "../utils/settlementCalculator";
 
 const Settlements: React.FC = () => {
-  const { state, addPayment, removePayment } = useApp();
+  const { state, addPayment, removePayment } = useAppContext();
   const { tours, activeTourId } = state;
   const navigate = useNavigate();
 
@@ -57,25 +57,24 @@ const Settlements: React.FC = () => {
     return null;
   }
 
-  const activeTour = tours.find((tour) => tour.id === activeTourId);
+  const activeTour = tours.find((tour: any) => tour.id === activeTourId);
 
   if (!activeTour) {
     navigate("/");
     return null;
   }
 
-  const balances = calculateBalances(activeTour);
   const settlements = calculateSettlements(activeTour);
 
   // Calculate expense totals for each traveler
   const calculateTravelerExpenseTotals = (travelerId: string) => {
     // Total paid by this traveler
     const totalPaid = activeTour.expenses
-      .filter((expense) => expense.paidById === travelerId)
-      .reduce((sum, expense) => {
+      .filter((expense: any) => expense.paidById === travelerId)
+      .reduce((sum: number, expense: any) => {
         // Convert to base currency if needed
         if (expense.currencyCode !== activeTour.baseCurrencyCode) {
-          const currency = activeTour.currencies.find((c) => c.code === expense.currencyCode);
+          const currency = activeTour.currencies.find((c: any) => c.code === expense.currencyCode);
           if (currency) {
             return sum + expense.amount / currency.exchangeRate;
           }
@@ -84,13 +83,13 @@ const Settlements: React.FC = () => {
       }, 0);
 
     // Total owed by this traveler
-    const totalOwed = activeTour.expenses.reduce((sum, expense) => {
-      const split = expense.splits.find((s) => s.travelerId === travelerId);
+    const totalOwed = activeTour.expenses.reduce((sum: number, expense: any) => {
+      const split = expense.splits.find((s: any) => s.travelerId === travelerId);
       if (!split) return sum;
 
       // Convert to base currency if needed
       if (expense.currencyCode !== activeTour.baseCurrencyCode) {
-        const currency = activeTour.currencies.find((c) => c.code === expense.currencyCode);
+        const currency = activeTour.currencies.find((c: any) => c.code === expense.currencyCode);
         if (currency) {
           return sum + split.amount / currency.exchangeRate;
         }
@@ -101,11 +100,11 @@ const Settlements: React.FC = () => {
     // Calculate payments made by this traveler
     const paymentsMade = activeTour.payments
       ? activeTour.payments
-          .filter((payment) => payment.fromTravelerId === travelerId)
-          .reduce((sum, payment) => {
+          .filter((payment: any) => payment.fromTravelerId === travelerId)
+          .reduce((sum: number, payment: any) => {
             // Convert to base currency if needed
             if (payment.currencyCode !== activeTour.baseCurrencyCode) {
-              const currency = activeTour.currencies.find((c) => c.code === payment.currencyCode);
+              const currency = activeTour.currencies.find((c: any) => c.code === payment.currencyCode);
               if (currency) {
                 return sum + payment.amount / currency.exchangeRate;
               }
@@ -117,11 +116,11 @@ const Settlements: React.FC = () => {
     // Calculate payments received by this traveler
     const paymentsReceived = activeTour.payments
       ? activeTour.payments
-          .filter((payment) => payment.toTravelerId === travelerId)
-          .reduce((sum, payment) => {
+          .filter((payment: any) => payment.toTravelerId === travelerId)
+          .reduce((sum: number, payment: any) => {
             // Convert to base currency if needed
             if (payment.currencyCode !== activeTour.baseCurrencyCode) {
-              const currency = activeTour.currencies.find((c) => c.code === payment.currencyCode);
+              const currency = activeTour.currencies.find((c: any) => c.code === payment.currencyCode);
               if (currency) {
                 return sum + payment.amount / currency.exchangeRate;
               }
@@ -317,7 +316,7 @@ const Settlements: React.FC = () => {
               <Alert severity="info">No travelers added yet.</Alert>
             ) : (
               <List disablePadding>
-                {activeTour.travelers.map((traveler) => {
+                {activeTour.travelers.map((traveler: any) => {
                   // Get the traveler's financial details
                   const travelerTotals = calculateTravelerExpenseTotals(traveler.id);
                   const balance = travelerTotals.finalBalance;
@@ -403,8 +402,8 @@ const Settlements: React.FC = () => {
               </TableHead>
               <TableBody>
                 {activeTour.payments
-                  .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-                  .map((payment) => (
+                  .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                  .map((payment: any) => (
                     <TableRow key={payment.id}>
                       <TableCell>{formatDate(payment.date)}</TableCell>
                       <TableCell>{getTravelerName(payment.fromTravelerId, activeTour.travelers)}</TableCell>
@@ -450,7 +449,7 @@ const Settlements: React.FC = () => {
               </TableHead>
               <TableBody>
                 {settlements
-                  .map((settlement, index) => {
+                  .map((settlement: any, index: number) => {
                     // Get the current balance of the debtor
                     const debtorTotals = calculateTravelerExpenseTotals(settlement.fromTravelerId);
                     const debtorBalance = debtorTotals.finalBalance;
@@ -489,7 +488,7 @@ const Settlements: React.FC = () => {
               <FormControl fullWidth required>
                 <InputLabel id="from-traveler-label">From</InputLabel>
                 <Select labelId="from-traveler-label" value={fromTravelerId} onChange={(e) => setFromTravelerId(e.target.value)} label="From">
-                  {activeTour.travelers.map((traveler) => (
+                  {activeTour.travelers.map((traveler: any) => (
                     <MenuItem key={traveler.id} value={traveler.id}>
                       {traveler.name}
                     </MenuItem>
@@ -501,7 +500,7 @@ const Settlements: React.FC = () => {
               <FormControl fullWidth required>
                 <InputLabel id="to-traveler-label">To</InputLabel>
                 <Select labelId="to-traveler-label" value={toTravelerId} onChange={(e) => setToTravelerId(e.target.value)} label="To">
-                  {activeTour.travelers.map((traveler) => (
+                  {activeTour.travelers.map((traveler: any) => (
                     <MenuItem key={traveler.id} value={traveler.id}>
                       {traveler.name}
                     </MenuItem>
@@ -517,7 +516,7 @@ const Settlements: React.FC = () => {
                 <InputLabel id="currency-label">Currency</InputLabel>
                 <Select labelId="currency-label" value={paymentCurrency} onChange={(e) => setPaymentCurrency(e.target.value)} label="Currency">
                   <MenuItem value={activeTour.baseCurrencyCode}>{activeTour.baseCurrencyCode}</MenuItem>
-                  {activeTour.currencies.map((currency) => (
+                  {activeTour.currencies.map((currency: any) => (
                     <MenuItem key={currency.code} value={currency.code}>
                       {currency.code} - {currency.name}
                     </MenuItem>

@@ -2,11 +2,11 @@ import { Add as AddIcon, ContentCopy as CopyIcon, FileUpload as ImportIcon, Sett
 import { Alert, Box, Button, Card, CardActions, CardContent, Divider, Grid, Paper, Snackbar, TextField, Typography } from "@mui/material";
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
-import { useApp } from "../context/AppContext";
+import { useAppContext } from "../context/AppContext";
 import { generateShareableLink } from "../utils";
 
 const Home: React.FC = () => {
-  const { state, createTour, importTourFromLink } = useApp();
+  const { state, createTour, importTourFromLink } = useAppContext();
   const { tours, activeTourId } = state;
 
   const [newTourName, setNewTourName] = useState("");

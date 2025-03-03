@@ -2,14 +2,14 @@ import MenuIcon from "@mui/icons-material/Menu";
 import { AppBar, Box, Button, Container, Divider, FormControl, IconButton, InputLabel, Menu, MenuItem, Paper, Select, SelectChangeEvent, Toolbar, Typography, useMediaQuery, useTheme } from "@mui/material";
 import React, { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { useApp } from "../context/AppContext";
+import { useAppContext } from "../context/AppContext";
 
 interface LayoutProps {
   children: React.ReactNode;
 }
 
 const Layout: React.FC<LayoutProps> = ({ children }) => {
-  const { state, setActiveTour } = useApp();
+  const { state, setActiveTour } = useAppContext();
   const location = useLocation();
   const { tours, activeTourId } = state;
   const theme = useTheme();
