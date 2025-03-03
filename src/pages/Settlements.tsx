@@ -164,11 +164,11 @@ const Settlements: React.FC = () => {
                     if (expense.currencyCode !== activeTour.baseCurrencyCode) {
                       const currency = activeTour.currencies.find((c) => c.code === expense.currencyCode);
                       if (currency) {
-                        return sum + ((split.percentage / 100) * expense.amount) / currency.exchangeRate;
+                        return sum + split.amount / currency.exchangeRate;
                       }
                     }
 
-                    return sum + (split.percentage / 100) * expense.amount;
+                    return sum + split.amount;
                   }, 0);
 
                   const balance = totalPaid - totalOwed;

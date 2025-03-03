@@ -55,7 +55,8 @@ export const calculateSettlements = (tour: Tour): Settlement[] => {
 
     // Subtract each split from the respective traveler's balance
     splits.forEach((split) => {
-      const splitAmountInBaseCurrency = (split.percentage / 100) * amountInBaseCurrency;
+      // Convert split amount to base currency
+      const splitAmountInBaseCurrency = convertCurrency(split.amount, currencyCode, baseCurrencyCode, currencies);
       balances[split.travelerId] -= splitAmountInBaseCurrency;
     });
   });

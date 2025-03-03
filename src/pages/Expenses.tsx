@@ -252,6 +252,9 @@ const Expenses: React.FC = () => {
                   </Select>
                 </FormControl>
               </Grid>
+              <Grid item xs={12}>
+                <TextField fullWidth label="Description" placeholder="What was this expense for?" value={newExpenseDescription} onChange={(e) => setNewExpenseDescription(e.target.value)} required />
+              </Grid>
             </Grid>
 
             <Box sx={{ mt: 4 }}>
@@ -353,6 +356,9 @@ const Expenses: React.FC = () => {
                           <Typography variant="h6">{expense.description}</Typography>
                           <Typography variant="body2" color="text.secondary">
                             {new Date(expense.date).toLocaleDateString()}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            Paid by: {paidBy?.name || "Unknown"}
                           </Typography>
                         </Box>
                         <Box sx={{ display: "flex", alignItems: "center" }}>
