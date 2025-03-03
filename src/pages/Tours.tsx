@@ -2,11 +2,11 @@ import { Add as AddIcon, Check as CheckIcon, Close as CloseIcon, Delete as Delet
 import { Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Divider, Grid, IconButton, Paper, Snackbar, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography } from "@mui/material";
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useApp } from "../context/AppContext";
+import { useAppContext } from "../context/AppContext";
 import { generateShareableLink } from "../utils";
 
 const Tours: React.FC = () => {
-  const { state, createTour, updateTour, deleteTour, setActiveTour } = useApp();
+  const { state, createTour, updateTour, deleteTour, setActiveTour } = useAppContext();
   const { tours } = state;
   const navigate = useNavigate();
 

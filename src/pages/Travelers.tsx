@@ -2,10 +2,10 @@ import { Check as CheckIcon, Close as CloseIcon, Delete as DeleteIcon, Edit as E
 import { Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Divider, Grid, IconButton, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography } from "@mui/material";
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useApp } from "../context/AppContext";
+import { useAppContext } from "../context/AppContext";
 
 const Travelers: React.FC = () => {
-  const { state, addTraveler, updateTraveler, removeTraveler } = useApp();
+  const { state, addTraveler, updateTraveler, removeTraveler } = useAppContext();
   const { tours, activeTourId } = state;
   const navigate = useNavigate();
 
