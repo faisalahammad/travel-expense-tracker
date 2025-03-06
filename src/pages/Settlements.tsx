@@ -1,4 +1,4 @@
-import { Add as AddIcon, AccountBalance as BalanceIcon, CurrencyExchange as CurrencyIcon, Delete as DeleteIcon, FileDownload as ExportIcon, Person as PersonIcon, Receipt as ReceiptIcon, SwapHoriz as TransactionIcon } from "@mui/icons-material";
+import { AccountBalance as BalanceIcon, CurrencyExchange as CurrencyIcon, FileDownload as ExportIcon, Person as PersonIcon, Receipt as ReceiptIcon, SwapHoriz as TransactionIcon } from "@mui/icons-material";
 import {
   Alert,
   Box,
@@ -11,7 +11,7 @@ import {
   Divider,
   FormControl,
   Grid,
-  IconButton,
+  InputAdornment,
   InputLabel,
   List,
   ListItem,
@@ -26,19 +26,19 @@ import {
   TableHead,
   TableRow,
   TextField,
-  Tooltip,
   Typography,
 } from "@mui/material";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Cell, Legend, Pie, PieChart, Tooltip as RechartsTooltip, ResponsiveContainer } from "recharts";
 import { useAppContext } from "../context/AppContext";
-import { formatCurrency, getTravelerName } from "../utils";
+import { convertCurrency, formatCurrency, getTravelerName } from "../utils";
 import { exportTourToExcel } from "../utils/excelExport";
 import { calculateSettlements } from "../utils/settlementCalculator";
 
 const Settlements: React.FC = () => {
   const { state, addPayment, removePayment } = useAppContext();
-  const { tours, activeTourId } = state;
+  const { tours, activeTourId, expenseCategories } = state;
   const navigate = useNavigate();
 
   // Payment dialog state
@@ -52,19 +52,59 @@ const Settlements: React.FC = () => {
   const [paymentNotes, setPaymentNotes] = useState("");
 
   // Redirect if no active tour
-  if (!activeTourId) {
-    navigate("/");
-    return null;
-  }
+  useEffect(() => {
+    if (!activeTourId) {
+      navigate("/");
+    }
+  }, [activeTourId, navigate]);
 
-  const activeTour = tours.find((tour: any) => tour.id === activeTourId);
+  const activeTour = tours.find((tour) => tour.id === activeTourId);
 
   if (!activeTour) {
-    navigate("/");
-    return null;
+    return (
+      <Alert severity="warning" sx={{ mt: 2 }}>
+        No active tour selected. Please select or create a tour first.
+      </Alert>
+    );
   }
 
   const settlements = calculateSettlements(activeTour);
+
+  // Calculate expense totals by category
+  const calculateExpensesByCategory = () => {
+    const categoryTotals: Record<string, number> = {};
+
+    // Initialize all categories with 0
+    expenseCategories.forEach((category) => {
+      categoryTotals[category.id] = 0;
+    });
+
+    // Sum up expenses by category
+    activeTour.expenses.forEach((expense) => {
+      const amount = expense.currencyCode !== activeTour.baseCurrencyCode ? convertCurrency(expense.amount, expense.currencyCode, activeTour.baseCurrencyCode, activeTour.currencies) : expense.amount;
+
+      if (categoryTotals[expense.categoryId] !== undefined) {
+        categoryTotals[expense.categoryId] += amount;
+      } else {
+        categoryTotals[expense.categoryId] = amount;
+      }
+    });
+
+    // Convert to array format for the chart
+    return Object.entries(categoryTotals)
+      .map(([categoryId, amount]) => {
+        const category = expenseCategories.find((c) => c.id === categoryId);
+        return {
+          name: category ? category.name : "Unknown",
+          value: Math.round(amount * 100) / 100,
+          color: category ? category.color : "#ccc",
+        };
+      })
+      .filter((item) => item.value > 0)
+      .sort((a, b) => b.value - a.value);
+  };
+
+  const expensesByCategory = calculateExpensesByCategory();
 
   // Calculate expense totals for each traveler
   const calculateTravelerExpenseTotals = (travelerId: string) => {
@@ -72,14 +112,28 @@ const Settlements: React.FC = () => {
     const totalPaid = activeTour.expenses
       .filter((expense: any) => expense.paidById === travelerId)
       .reduce((sum: number, expense: any) => {
-        // Convert to base currency if needed
-        if (expense.currencyCode !== activeTour.baseCurrencyCode) {
-          const currency = activeTour.currencies.find((c: any) => c.code === expense.currencyCode);
-          if (currency) {
-            return sum + expense.amount / currency.exchangeRate;
+        // Get the base amount (amount in base currency)
+        let expenseAmount = 0;
+
+        // Use the pre-calculated baseAmount if available
+        if (expense.baseAmount !== undefined) {
+          expenseAmount = expense.baseAmount;
+        } else {
+          // Otherwise calculate using the exchange rate
+          if (expense.currencyCode !== activeTour.baseCurrencyCode) {
+            const currency = activeTour.currencies.find((c: any) => c.code === expense.currencyCode);
+            if (currency) {
+              // If 1 USD = 124.64 BDT, then 1200 USD should be 1200 * 124.64 = 149,568 BDT
+              expenseAmount = expense.amount * currency.exchangeRate;
+            } else {
+              expenseAmount = expense.amount;
+            }
+          } else {
+            expenseAmount = expense.amount;
           }
         }
-        return sum + expense.amount;
+
+        return sum + expenseAmount;
       }, 0);
 
     // Total owed by this traveler
@@ -87,14 +141,32 @@ const Settlements: React.FC = () => {
       const split = expense.splits.find((s: any) => s.travelerId === travelerId);
       if (!split) return sum;
 
-      // Convert to base currency if needed
-      if (expense.currencyCode !== activeTour.baseCurrencyCode) {
-        const currency = activeTour.currencies.find((c: any) => c.code === expense.currencyCode);
-        if (currency) {
-          return sum + split.amount / currency.exchangeRate;
+      // Get the base amount for the split
+      let splitAmount = 0;
+
+      // Use the pre-calculated baseAmount if available
+      if (split.baseAmount !== undefined) {
+        splitAmount = split.baseAmount;
+      } else {
+        // If expense has baseAmount, calculate proportionally
+        if (expense.baseAmount !== undefined) {
+          splitAmount = split.amount * (expense.baseAmount / expense.amount);
+        } else {
+          // Otherwise calculate using the exchange rate
+          if (expense.currencyCode !== activeTour.baseCurrencyCode) {
+            const currency = activeTour.currencies.find((c: any) => c.code === expense.currencyCode);
+            if (currency) {
+              splitAmount = split.amount * currency.exchangeRate;
+            } else {
+              splitAmount = split.amount;
+            }
+          } else {
+            splitAmount = split.amount;
+          }
         }
       }
-      return sum + split.amount;
+
+      return sum + splitAmount;
     }, 0);
 
     // Calculate payments made by this traveler
@@ -103,13 +175,15 @@ const Settlements: React.FC = () => {
           .filter((payment: any) => payment.fromTravelerId === travelerId)
           .reduce((sum: number, payment: any) => {
             // Convert to base currency if needed
+            let paymentAmount = payment.amount;
             if (payment.currencyCode !== activeTour.baseCurrencyCode) {
               const currency = activeTour.currencies.find((c: any) => c.code === payment.currencyCode);
               if (currency) {
-                return sum + payment.amount / currency.exchangeRate;
+                // If 1 USD = 124.64 BDT, then 1200 USD should be 1200 * 124.64 = 149,568 BDT
+                paymentAmount = payment.amount * currency.exchangeRate;
               }
             }
-            return sum + payment.amount;
+            return sum + paymentAmount;
           }, 0)
       : 0;
 
@@ -119,13 +193,15 @@ const Settlements: React.FC = () => {
           .filter((payment: any) => payment.toTravelerId === travelerId)
           .reduce((sum: number, payment: any) => {
             // Convert to base currency if needed
+            let paymentAmount = payment.amount;
             if (payment.currencyCode !== activeTour.baseCurrencyCode) {
               const currency = activeTour.currencies.find((c: any) => c.code === payment.currencyCode);
               if (currency) {
-                return sum + payment.amount / currency.exchangeRate;
+                // If 1 USD = 124.64 BDT, then 1200 USD should be 1200 * 124.64 = 149,568 BDT
+                paymentAmount = payment.amount * currency.exchangeRate;
               }
             }
-            return sum + payment.amount;
+            return sum + paymentAmount;
           }, 0)
       : 0;
 
@@ -157,7 +233,7 @@ const Settlements: React.FC = () => {
     if (fromId) setFromTravelerId(fromId);
     if (toId) setToTravelerId(toId);
     if (amount) setPaymentAmount(amount.toString());
-    if (activeTour.baseCurrencyCode) setPaymentCurrency(activeTour.baseCurrencyCode);
+    setPaymentCurrency(activeTour.baseCurrencyCode);
 
     setPaymentDialogOpen(true);
   };
@@ -175,15 +251,13 @@ const Settlements: React.FC = () => {
   };
 
   const handleAddPayment = () => {
-    if (fromTravelerId && toTravelerId && paymentAmount && paymentCurrency && paymentDate && paymentMethod) {
+    if (fromTravelerId && toTravelerId && paymentAmount && paymentCurrency && paymentDate && activeTourId) {
       addPayment(activeTourId, {
         fromTravelerId,
         toTravelerId,
         amount: parseFloat(paymentAmount),
         currencyCode: paymentCurrency,
         date: paymentDate,
-        method: paymentMethod,
-        notes: paymentNotes || undefined,
       });
 
       // Close dialog
@@ -192,7 +266,7 @@ const Settlements: React.FC = () => {
   };
 
   const handleDeletePayment = (paymentId: string) => {
-    if (confirm("Are you sure you want to delete this payment record?")) {
+    if (confirm("Are you sure you want to delete this payment record?") && activeTourId) {
       removePayment(activeTourId, paymentId);
     }
   };
@@ -215,6 +289,9 @@ const Settlements: React.FC = () => {
       <Typography variant="h6" component="h2" gutterBottom color="text.secondary">
         Tour: {activeTour.name}
       </Typography>
+      <Alert severity="info" sx={{ mb: 3 }}>
+        All amounts shown are in base currency ({activeTour.baseCurrencyCode}). Expenses in other currencies have been converted using the defined exchange rates.
+      </Alert>
 
       <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12} md={6}>
@@ -248,9 +325,7 @@ const Settlements: React.FC = () => {
                     </Box>
                   }
                 />
-                <Typography variant="body1" fontWeight="medium">
-                  {activeTour.travelers.length}
-                </Typography>
+                <Typography variant="body1">{activeTour.travelers.length}</Typography>
               </ListItem>
               <ListItem sx={{ py: 1 }}>
                 <ListItemText
@@ -263,9 +338,7 @@ const Settlements: React.FC = () => {
                     </Box>
                   }
                 />
-                <Typography variant="body1" fontWeight="medium">
-                  {activeTour.currencies.length}
-                </Typography>
+                <Typography variant="body1">{activeTour.currencies.length}</Typography>
               </ListItem>
               <ListItem sx={{ py: 1 }}>
                 <ListItemText
@@ -278,9 +351,7 @@ const Settlements: React.FC = () => {
                     </Box>
                   }
                 />
-                <Typography variant="body1" fontWeight="medium">
-                  {activeTour.expenses.length}
-                </Typography>
+                <Typography variant="body1">{activeTour.expenses.length}</Typography>
               </ListItem>
               <ListItem sx={{ py: 1 }}>
                 <ListItemText
@@ -293,13 +364,12 @@ const Settlements: React.FC = () => {
                     </Box>
                   }
                 />
-                <Typography variant="body1" fontWeight="medium">
-                  {settlements.length}
-                </Typography>
+                <Typography variant="body1">{activeTour.expenses.length + (activeTour.payments ? activeTour.payments.length : 0)}</Typography>
               </ListItem>
             </List>
+
             <Box sx={{ mt: 3 }}>
-              <Button variant="contained" color="primary" startIcon={<ExportIcon />} onClick={handleExportToExcel}>
+              <Button variant="contained" startIcon={<ExportIcon />} onClick={handleExportToExcel} fullWidth>
                 Export to Excel
               </Button>
             </Box>
@@ -309,121 +379,72 @@ const Settlements: React.FC = () => {
         <Grid item xs={12} md={6}>
           <Paper elevation={2} sx={{ p: 3, height: "100%" }}>
             <Typography variant="h5" component="h3" gutterBottom>
-              Expense Totals by Traveler
+              Expense Distribution by Category
             </Typography>
             <Divider sx={{ mb: 3 }} />
-            {activeTour.travelers.length === 0 ? (
-              <Alert severity="info">No travelers added yet.</Alert>
+
+            {expensesByCategory.length > 0 ? (
+              <Box sx={{ height: 300, width: "100%" }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={expensesByCategory} cx="50%" cy="50%" labelLine={false} outerRadius={80} fill="#8884d8" dataKey="value" nameKey="name" label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}>
+                      {expensesByCategory.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Legend />
+                    <RechartsTooltip formatter={(value: number) => [`${formatCurrency(value, activeTour.baseCurrencyCode)}`, "Amount"]} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </Box>
             ) : (
-              <List disablePadding>
-                {activeTour.travelers.map((traveler: any) => {
-                  // Get the traveler's financial details
-                  const travelerTotals = calculateTravelerExpenseTotals(traveler.id);
-                  const balance = travelerTotals.finalBalance;
-
-                  // Determine background color based on balance
-                  let bgColor = "transparent";
-                  if (Math.abs(balance) < 0.01) {
-                    bgColor = "info.light"; // Balanced (close to zero)
-                  } else if (balance > 0) {
-                    bgColor = "success.light"; // Positive balance
-                  } else {
-                    bgColor = "error.light"; // Negative balance
-                  }
-
-                  return (
-                    <ListItem
-                      key={traveler.id}
-                      sx={{
-                        py: 1.5,
-                        px: 2,
-                        mb: 1,
-                        borderRadius: 1,
-                        bgcolor: bgColor,
-                      }}
-                    >
-                      <ListItemText primary={traveler.name} primaryTypographyProps={{ fontWeight: "medium" }} />
-                      <Box sx={{ textAlign: "right" }}>
-                        <Typography variant="body1" fontWeight="medium" color={Math.abs(balance) < 0.01 ? "text.primary" : balance > 0 ? "success.main" : "error.main"}>
-                          {formatCurrency(balance, activeTour.baseCurrencyCode)}
-                        </Typography>
-                        <Tooltip
-                          title={
-                            <React.Fragment>
-                              <Typography variant="body2">Expense Balance: {formatCurrency(travelerTotals.netExpenseBalance, activeTour.baseCurrencyCode)}</Typography>
-                              <Typography variant="body2">Payment Balance: {formatCurrency(travelerTotals.netPaymentBalance, activeTour.baseCurrencyCode)}</Typography>
-                              <Divider sx={{ my: 1 }} />
-                              <Typography variant="body2">Paid: {formatCurrency(travelerTotals.totalPaid, activeTour.baseCurrencyCode)}</Typography>
-                              <Typography variant="body2">Owed: {formatCurrency(travelerTotals.totalOwed, activeTour.baseCurrencyCode)}</Typography>
-                              <Typography variant="body2">Payments Made: {formatCurrency(travelerTotals.paymentsMade, activeTour.baseCurrencyCode)}</Typography>
-                              <Typography variant="body2">Payments Received: {formatCurrency(travelerTotals.paymentsReceived, activeTour.baseCurrencyCode)}</Typography>
-                            </React.Fragment>
-                          }
-                          arrow
-                        >
-                          <Typography variant="caption" color="text.secondary" sx={{ cursor: "help" }}>
-                            Expenses: {formatCurrency(travelerTotals.netExpenseBalance, activeTour.baseCurrencyCode)}, Payments: {formatCurrency(travelerTotals.netPaymentBalance, activeTour.baseCurrencyCode)}
-                          </Typography>
-                        </Tooltip>
-                      </Box>
-                    </ListItem>
-                  );
-                })}
-              </List>
+              <Typography variant="body1" color="text.secondary" sx={{ textAlign: "center", py: 5 }}>
+                No expenses added yet.
+              </Typography>
             )}
           </Paper>
         </Grid>
       </Grid>
 
       <Paper elevation={2} sx={{ p: 3, mb: 4 }}>
-        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
-          <Typography variant="h5" component="h3" gutterBottom sx={{ mb: 0 }}>
-            Payment Records
+        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
+          <Typography variant="h5" component="h3">
+            Expense Totals by Traveler
           </Typography>
-          <Button variant="contained" color="primary" startIcon={<AddIcon />} onClick={() => handleOpenPaymentDialog()}>
-            Add Payment
-          </Button>
         </Box>
         <Divider sx={{ mb: 3 }} />
 
-        {activeTour.payments && activeTour.payments.length > 0 ? (
-          <TableContainer>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Date</TableCell>
-                  <TableCell>From</TableCell>
-                  <TableCell>To</TableCell>
-                  <TableCell>Amount</TableCell>
-                  <TableCell>Method</TableCell>
-                  <TableCell>Notes</TableCell>
-                  <TableCell>Actions</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {activeTour.payments
-                  .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
-                  .map((payment: any) => (
-                    <TableRow key={payment.id}>
-                      <TableCell>{formatDate(payment.date)}</TableCell>
-                      <TableCell>{getTravelerName(payment.fromTravelerId, activeTour.travelers)}</TableCell>
-                      <TableCell>{getTravelerName(payment.toTravelerId, activeTour.travelers)}</TableCell>
-                      <TableCell>{formatCurrency(payment.amount, payment.currencyCode)}</TableCell>
-                      <TableCell>{payment.method}</TableCell>
-                      <TableCell>{payment.notes || "-"}</TableCell>
-                      <TableCell>
-                        <IconButton size="small" color="error" onClick={() => handleDeletePayment(payment.id)}>
-                          <DeleteIcon fontSize="small" />
-                        </IconButton>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        ) : (
-          <Alert severity="info">No payment records added yet.</Alert>
-        )}
+        <Grid container spacing={2}>
+          {activeTour.travelers.map((traveler) => {
+            const totals = calculateTravelerExpenseTotals(traveler.id);
+            const isPositive = totals.finalBalance > 0;
+            const isNeutral = Math.abs(totals.finalBalance) < 0.01;
+
+            return (
+              <Grid item xs={12} md={4} key={traveler.id}>
+                <Paper
+                  elevation={1}
+                  sx={{
+                    p: 2,
+                    bgcolor: isNeutral ? "success.light" : isPositive ? "success.light" : "error.light",
+                    color: isNeutral ? "success.contrastText" : isPositive ? "success.contrastText" : "error.contrastText",
+                  }}
+                >
+                  <Typography variant="h6" component="h4" gutterBottom>
+                    {traveler.name}
+                  </Typography>
+                  <Typography variant="h5" component="div" align="right" sx={{ mb: 1 }}>
+                    {isPositive ? "" : "-"}
+                    {formatCurrency(Math.abs(totals.finalBalance), activeTour.baseCurrencyCode)}
+                  </Typography>
+                  <Typography variant="body2" align="right">
+                    Expenses: {formatCurrency(totals.totalOwed, activeTour.baseCurrencyCode)}, Payments: {formatCurrency(totals.paymentsMade, activeTour.baseCurrencyCode)}
+                  </Typography>
+                </Paper>
+              </Grid>
+            );
+          })}
+        </Grid>
       </Paper>
 
       <Paper elevation={2} sx={{ p: 3 }}>
@@ -432,10 +453,8 @@ const Settlements: React.FC = () => {
         </Typography>
         <Divider sx={{ mb: 3 }} />
 
-        {activeTour.expenses.length === 0 ? (
-          <Alert severity="info">No expenses added yet. Add expenses to generate a settlement plan.</Alert>
-        ) : settlements.length === 0 ? (
-          <Alert severity="success">No settlements needed. All expenses are already balanced.</Alert>
+        {settlements.length === 0 ? (
+          <Alert severity="info">No settlements needed. All expenses are balanced.</Alert>
         ) : (
           <TableContainer>
             <Table>
@@ -444,35 +463,22 @@ const Settlements: React.FC = () => {
                   <TableCell>From</TableCell>
                   <TableCell>To</TableCell>
                   <TableCell>Amount</TableCell>
-                  <TableCell>Actions</TableCell>
+                  <TableCell align="right">Actions</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
-                {settlements
-                  .map((settlement: any, index: number) => {
-                    // Get the current balance of the debtor
-                    const debtorTotals = calculateTravelerExpenseTotals(settlement.fromTravelerId);
-                    const debtorBalance = debtorTotals.finalBalance;
-
-                    // Only show settlements where the debtor still has a negative balance
-                    // This ensures that payments already made are reflected in the settlement plan
-                    if (debtorBalance < -0.01) {
-                      return (
-                        <TableRow key={`${settlement.fromTravelerId}-${settlement.toTravelerId}-${index}`}>
-                          <TableCell>{getTravelerName(settlement.fromTravelerId, activeTour.travelers)}</TableCell>
-                          <TableCell>{getTravelerName(settlement.toTravelerId, activeTour.travelers)}</TableCell>
-                          <TableCell>{formatCurrency(settlement.amount, settlement.currencyCode)}</TableCell>
-                          <TableCell>
-                            <Button size="small" variant="outlined" onClick={() => handleOpenPaymentDialog(settlement.fromTravelerId, settlement.toTravelerId, settlement.amount)}>
-                              Record Payment
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    }
-                    return null;
-                  })
-                  .filter(Boolean)}
+                {settlements.map((settlement, index) => (
+                  <TableRow key={index}>
+                    <TableCell>{getTravelerName(settlement.fromTravelerId, activeTour.travelers)}</TableCell>
+                    <TableCell>{getTravelerName(settlement.toTravelerId, activeTour.travelers)}</TableCell>
+                    <TableCell>{formatCurrency(settlement.amount, settlement.currencyCode)}</TableCell>
+                    <TableCell align="right">
+                      <Button variant="outlined" size="small" onClick={() => handleOpenPaymentDialog(settlement.fromTravelerId, settlement.toTravelerId, settlement.amount)}>
+                        Record Payment
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
               </TableBody>
             </Table>
           </TableContainer>
@@ -485,10 +491,10 @@ const Settlements: React.FC = () => {
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 1 }}>
             <Grid item xs={12} sm={6}>
-              <FormControl fullWidth required>
-                <InputLabel id="from-traveler-label">From</InputLabel>
-                <Select labelId="from-traveler-label" value={fromTravelerId} onChange={(e) => setFromTravelerId(e.target.value)} label="From">
-                  {activeTour.travelers.map((traveler: any) => (
+              <FormControl fullWidth>
+                <InputLabel>From</InputLabel>
+                <Select value={fromTravelerId} onChange={(e) => setFromTravelerId(e.target.value)} label="From">
+                  {activeTour.travelers.map((traveler) => (
                     <MenuItem key={traveler.id} value={traveler.id}>
                       {traveler.name}
                     </MenuItem>
@@ -497,11 +503,11 @@ const Settlements: React.FC = () => {
               </FormControl>
             </Grid>
             <Grid item xs={12} sm={6}>
-              <FormControl fullWidth required>
-                <InputLabel id="to-traveler-label">To</InputLabel>
-                <Select labelId="to-traveler-label" value={toTravelerId} onChange={(e) => setToTravelerId(e.target.value)} label="To">
-                  {activeTour.travelers.map((traveler: any) => (
-                    <MenuItem key={traveler.id} value={traveler.id}>
+              <FormControl fullWidth>
+                <InputLabel>To</InputLabel>
+                <Select value={toTravelerId} onChange={(e) => setToTravelerId(e.target.value)} label="To">
+                  {activeTour.travelers.map((traveler) => (
+                    <MenuItem key={traveler.id} value={traveler.id} disabled={traveler.id === fromTravelerId}>
                       {traveler.name}
                     </MenuItem>
                   ))}
@@ -509,14 +515,22 @@ const Settlements: React.FC = () => {
               </FormControl>
             </Grid>
             <Grid item xs={12} sm={6}>
-              <TextField fullWidth label="Amount" type="number" value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)} required inputProps={{ min: "0.01", step: "0.01" }} />
+              <TextField
+                fullWidth
+                label="Amount"
+                type="number"
+                value={paymentAmount}
+                onChange={(e) => setPaymentAmount(e.target.value)}
+                InputProps={{
+                  startAdornment: <InputAdornment position="start">{paymentCurrency}</InputAdornment>,
+                }}
+              />
             </Grid>
             <Grid item xs={12} sm={6}>
-              <FormControl fullWidth required>
-                <InputLabel id="currency-label">Currency</InputLabel>
-                <Select labelId="currency-label" value={paymentCurrency} onChange={(e) => setPaymentCurrency(e.target.value)} label="Currency">
-                  <MenuItem value={activeTour.baseCurrencyCode}>{activeTour.baseCurrencyCode}</MenuItem>
-                  {activeTour.currencies.map((currency: any) => (
+              <FormControl fullWidth>
+                <InputLabel>Currency</InputLabel>
+                <Select value={paymentCurrency} onChange={(e) => setPaymentCurrency(e.target.value)} label="Currency">
+                  {activeTour.currencies.map((currency) => (
                     <MenuItem key={currency.code} value={currency.code}>
                       {currency.code} - {currency.name}
                     </MenuItem>
@@ -524,30 +538,27 @@ const Settlements: React.FC = () => {
                 </Select>
               </FormControl>
             </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField fullWidth label="Date" type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} required InputLabelProps={{ shrink: true }} />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <FormControl fullWidth required>
-                <InputLabel id="method-label">Payment Method</InputLabel>
-                <Select labelId="method-label" value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} label="Payment Method">
-                  <MenuItem value="Cash">Cash</MenuItem>
-                  <MenuItem value="Bank Transfer">Bank Transfer</MenuItem>
-                  <MenuItem value="Wise">Wise</MenuItem>
-                  <MenuItem value="Old Debt">Old Debt</MenuItem>
-                  <MenuItem value="Other">Other</MenuItem>
-                </Select>
-              </FormControl>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Date"
+                type="date"
+                value={paymentDate}
+                onChange={(e) => setPaymentDate(e.target.value)}
+                InputLabelProps={{
+                  shrink: true,
+                }}
+              />
             </Grid>
             <Grid item xs={12}>
-              <TextField fullWidth label="Notes" multiline rows={2} value={paymentNotes} onChange={(e) => setPaymentNotes(e.target.value)} placeholder="Optional notes about this payment" />
+              <TextField fullWidth label="Notes (Optional)" multiline rows={2} value={paymentNotes} onChange={(e) => setPaymentNotes(e.target.value)} />
             </Grid>
           </Grid>
         </DialogContent>
         <DialogActions>
           <Button onClick={handleClosePaymentDialog}>Cancel</Button>
           <Button onClick={handleAddPayment} variant="contained" color="primary">
-            Save Payment
+            Save
           </Button>
         </DialogActions>
       </Dialog>

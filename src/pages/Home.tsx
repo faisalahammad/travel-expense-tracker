@@ -1,19 +1,15 @@
-import { Add as AddIcon, ContentCopy as CopyIcon, FileUpload as ImportIcon, Settings as SettingsIcon } from "@mui/icons-material";
-import { Alert, Box, Button, Card, CardActions, CardContent, Divider, Grid, Paper, Snackbar, TextField, Typography } from "@mui/material";
+import { Add as AddIcon, Settings as SettingsIcon } from "@mui/icons-material";
+import { Alert, Box, Button, Card, CardActions, CardContent, Divider, Grid, Paper, TextField, Typography } from "@mui/material";
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { useAppContext } from "../context/AppContext";
-import { generateShareableLink } from "../utils";
 
 const Home: React.FC = () => {
-  const { state, createTour, importTourFromLink } = useAppContext();
+  const { state, createTour } = useAppContext();
   const { tours, activeTourId } = state;
 
   const [newTourName, setNewTourName] = useState("");
   const [newTourCurrency, setNewTourCurrency] = useState("USD");
-  const [importUrl, setImportUrl] = useState("");
-  const [importError, setImportError] = useState("");
-  const [snackbarOpen, setSnackbarOpen] = useState(false);
 
   const activeTour = activeTourId ? tours.find((tour) => tour.id === activeTourId) : null;
 
@@ -24,36 +20,6 @@ const Home: React.FC = () => {
       setNewTourName("");
       setNewTourCurrency("USD");
     }
-  };
-
-  const handleImportTour = (e: React.FormEvent) => {
-    e.preventDefault();
-    setImportError("");
-
-    if (!importUrl.trim()) {
-      setImportError("Please enter a URL");
-      return;
-    }
-
-    const success = importTourFromLink(importUrl.trim());
-
-    if (success) {
-      setImportUrl("");
-    } else {
-      setImportError("Failed to import tour. Invalid URL or data format.");
-    }
-  };
-
-  const handleCopyShareableLink = () => {
-    if (!activeTour) return;
-
-    const link = generateShareableLink(activeTour);
-    navigator.clipboard.writeText(link);
-    setSnackbarOpen(true);
-  };
-
-  const handleCloseSnackbar = () => {
-    setSnackbarOpen(false);
   };
 
   return (
@@ -134,17 +100,12 @@ const Home: React.FC = () => {
                 </Card>
               </Grid>
             </Grid>
-            <Box sx={{ mt: 2 }}>
-              <Button variant="outlined" startIcon={<CopyIcon />} onClick={handleCopyShareableLink}>
-                Generate Shareable Link
-              </Button>
-            </Box>
           </Paper>
         )
       )}
 
       <Grid container spacing={3}>
-        <Grid item xs={12} md={6}>
+        <Grid item xs={12}>
           <Paper elevation={2} sx={{ p: 3, height: "100%" }}>
             <Typography variant="h5" component="h2" gutterBottom>
               Create New Tour
@@ -159,21 +120,6 @@ const Home: React.FC = () => {
             </form>
           </Paper>
         </Grid>
-
-        <Grid item xs={12} md={6}>
-          <Paper elevation={2} sx={{ p: 3, height: "100%" }}>
-            <Typography variant="h5" component="h2" gutterBottom>
-              Import Tour from Link
-            </Typography>
-            <Divider sx={{ mb: 3 }} />
-            <form onSubmit={handleImportTour}>
-              <TextField fullWidth id="importUrl" label="Shareable Link" placeholder="Paste the shareable link here" variant="outlined" value={importUrl} onChange={(e) => setImportUrl(e.target.value)} required margin="normal" error={!!importError} helperText={importError || ""} />
-              <Button type="submit" variant="contained" color="secondary" startIcon={<ImportIcon />} sx={{ mt: 2 }}>
-                Import Tour
-              </Button>
-            </form>
-          </Paper>
-        </Grid>
       </Grid>
 
       {tours.length > 0 && (
@@ -183,8 +129,6 @@ const Home: React.FC = () => {
           </Button>
         </Box>
       )}
-
-      <Snackbar open={snackbarOpen} autoHideDuration={3000} onClose={handleCloseSnackbar} message="Shareable link copied to clipboard!" />
     </>
   );
 };

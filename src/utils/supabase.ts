@@ -1,6 +1,28 @@
 import { createClient } from "@supabase/supabase-js";
 import { AppState, Tour } from "../types";
 
+// Extended interfaces for database operations
+interface ExtendedExpense {
+  id: string;
+  date: string;
+  amount: number;
+  currencyCode: string;
+  baseAmount?: number;
+  baseCurrencyCode?: string;
+  description: string;
+  paidById: string;
+  splits: ExtendedExpenseSplit[];
+  categoryId: string;
+  createdAt: string;
+}
+
+interface ExtendedExpenseSplit {
+  travelerId: string;
+  amount: number;
+  baseAmount?: number;
+  percentage?: number;
+}
+
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "";
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
 
@@ -173,12 +195,17 @@ export const saveTour = async (tour: Tour): Promise<void> => {
 
           // Upsert current expenses
           for (const expense of tour.expenses) {
+            // Cast to extended interface
+            const extendedExpense = expense as unknown as ExtendedExpense;
+
             const expenseData = {
               id: expense.id,
               tour_id: tour.id,
               description: expense.description,
               amount: expense.amount,
               currency_code: expense.currencyCode,
+              base_amount: extendedExpense.baseAmount || expense.amount,
+              base_currency_code: extendedExpense.baseCurrencyCode || tour.baseCurrencyCode,
               date: expense.date,
               paid_by_id: expense.paidById,
               category_id: expense.categoryId,
@@ -199,11 +226,17 @@ export const saveTour = async (tour: Tour): Promise<void> => {
                   console.error("Error deleting expense splits:", deleteSplitsError);
                 } else {
                   // Then insert all current splits
-                  const splitsToInsert = expense.splits.map((split) => ({
-                    expense_id: expense.id,
-                    traveler_id: split.travelerId,
-                    amount: split.amount,
-                  }));
+                  const splitsToInsert = expense.splits.map((split) => {
+                    // Cast to extended interface
+                    const extendedSplit = split as unknown as ExtendedExpenseSplit;
+
+                    return {
+                      expense_id: expense.id,
+                      traveler_id: split.travelerId,
+                      amount: split.amount,
+                      base_amount: extendedSplit.baseAmount || split.amount,
+                    };
+                  });
 
                   const { error: insertSplitsError } = await supabase.from("expense_splits").insert(splitsToInsert);
 
