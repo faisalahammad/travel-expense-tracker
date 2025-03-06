@@ -10,7 +10,7 @@ interface ExpenseFormProps {
   open: boolean;
   onClose: () => void;
   initialExpense?: Expense;
-  onSave: (expense: Omit<Expense, "id" | "createdById" | "createdAt">) => void;
+  onSave: (expense: Omit<Expense, "id" | "createdAt">) => void;
 }
 
 const ExpenseForm: React.FC<ExpenseFormProps> = ({ open, onClose, initialExpense, onSave }) => {
@@ -117,7 +117,12 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ open, onClose, initialExpense
       }));
     }
 
-    const expenseData: Omit<Expense, "id" | "createdById" | "createdAt"> = {
+    // Store the original amount and currency for reference
+    const originalAmount = parsedAmount;
+    const originalCurrency = currencyCode;
+
+    // Create the expense data with the original currency information
+    const expenseData: Omit<Expense, "id" | "createdAt"> = {
       description,
       amount: parsedAmount,
       currencyCode,

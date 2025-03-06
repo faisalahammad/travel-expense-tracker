@@ -2,6 +2,7 @@ import { Add as AddIcon, Check as CheckIcon, Close as CloseIcon, Delete as Delet
 import { Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Divider, Grid, IconButton, Paper, Snackbar, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography } from "@mui/material";
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { v4 as uuidv4 } from "uuid";
 import { useAppContext } from "../context/AppContext";
 import { generateShareableLink } from "../utils";
 
@@ -17,13 +18,43 @@ const Tours: React.FC = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [tourToDelete, setTourToDelete] = useState<string | null>(null);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [shareLink, setShareLink] = useState("");
 
-  const handleCreateTour = (e: React.FormEvent) => {
+  const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newTourName.trim() && newTourCurrency.trim()) {
-      createTour(newTourName.trim(), newTourCurrency.trim());
+      await handleCreateTour(newTourName.trim(), newTourCurrency.trim());
       setNewTourName("");
       setNewTourCurrency("USD");
+    }
+  };
+
+  const handleCreateTour = async (tourName: string, baseCurrencyCode: string) => {
+    try {
+      // Create the tour - createTour returns a Tour object or null
+      const newTour = await createTour(tourName, baseCurrencyCode);
+
+      if (!newTour) {
+        console.error("Failed to create tour");
+        return;
+      }
+
+      // Automatically add a default traveler
+      const travelerId = uuidv4();
+      const travelerName = "You";
+
+      // Update the tour with the new traveler
+      updateTour(newTour.id, {
+        travelers: [
+          ...newTour.travelers,
+          {
+            id: travelerId,
+            name: travelerName,
+          },
+        ],
+      });
+    } catch (error) {
+      console.error("Error creating tour:", error);
     }
   };
 
@@ -95,7 +126,7 @@ const Tours: React.FC = () => {
           Create New Tour
         </Typography>
         <Divider sx={{ mb: 3 }} />
-        <Box component="form" onSubmit={handleCreateTour}>
+        <Box component="form" onSubmit={handleFormSubmit}>
           <Grid container spacing={2} alignItems="center">
             <Grid item xs={12} md={5}>
               <TextField fullWidth label="Tour Name" value={newTourName} onChange={(e) => setNewTourName(e.target.value)} required variant="outlined" />
@@ -203,13 +234,13 @@ const Tours: React.FC = () => {
           <Button onClick={handleCloseDeleteDialog} color="primary">
             Cancel
           </Button>
-          <Button onClick={handleConfirmDelete} color="error" variant="contained">
+          <Button onClick={handleConfirmDelete} color="error">
             Delete
           </Button>
         </DialogActions>
       </Dialog>
 
-      {/* Snackbar for copy notification */}
+      {/* Snackbar for copy link notification */}
       <Snackbar open={snackbarOpen} autoHideDuration={3000} onClose={handleCloseSnackbar} message="Shareable link copied to clipboard!" />
     </>
   );

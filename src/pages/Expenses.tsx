@@ -104,7 +104,9 @@ const Expenses: React.FC = () => {
     setCurrentExpense(undefined);
   };
 
-  const handleSaveExpense = (expenseData: Omit<Expense, "id" | "createdById" | "createdAt">) => {
+  const handleSaveExpense = (expenseData: Omit<Expense, "id" | "createdAt">) => {
+    if (!activeTourId) return;
+
     if (currentExpense) {
       // Update existing expense
       updateExpense(activeTourId, currentExpense.id, expenseData);

@@ -1,12 +1,20 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
-import { AppState, Currency, DEFAULT_EXPENSE_CATEGORIES, Expense, ExpenseCategory, PaymentRecord, Tour, Traveler, User } from "../types";
+import { AppState, Currency, DEFAULT_EXPENSE_CATEGORIES, Expense, ExpenseCategory, PaymentRecord, Tour } from "../types";
 import { parseShareableLink } from "../utils";
-import { deleteTour as deleteSupabaseTour, loadAppState, saveAppState } from "../utils/supabase";
+import { loadAppState } from "../utils/loadAppState";
+import { deleteTour as deleteSupabaseTour, saveAppState } from "../utils/supabase";
+
+// Extend ExpenseSplit interface to include percentage property
+interface ExtendedExpenseSplit {
+  travelerId: string;
+  amount: number;
+  percentage: number;
+}
 
 interface AppContextType {
   state: AppState;
-  createTour: (name: string, baseCurrencyCode: string) => void;
+  createTour: (name: string, baseCurrencyCode: string) => Promise<Tour | null>;
   updateTour: (tourId: string, updates: Partial<Tour>) => void;
   deleteTour: (tourId: string) => void;
   setActiveTour: (tourId: string | null) => void;
@@ -16,13 +24,12 @@ interface AppContextType {
   addCurrency: (tourId: string, code: string, name: string, exchangeRate: number) => void;
   updateCurrency: (tourId: string, currencyCode: string, updates: Partial<Currency>) => void;
   removeCurrency: (tourId: string, currencyCode: string) => void;
-  addExpense: (tourId: string, expenseData: Omit<Expense, "id" | "createdById" | "createdAt">) => void;
+  addExpense: (tourId: string, expenseData: Omit<Expense, "id" | "createdAt">) => void;
   updateExpense: (tourId: string, expenseId: string, updates: Partial<Expense>) => void;
   removeExpense: (tourId: string, expenseId: string) => void;
-  addPayment: (tourId: string, paymentData: Omit<PaymentRecord, "id" | "createdById" | "createdAt">) => void;
+  addPayment: (tourId: string, paymentData: Omit<PaymentRecord, "id" | "createdAt">) => void;
   removePayment: (tourId: string, paymentId: string) => void;
   importTourFromLink: (url: string) => boolean;
-  setCurrentUser: (user: User | null) => void;
   addExpenseCategory: (category: Omit<ExpenseCategory, "id">) => void;
   updateExpenseCategory: (categoryId: string, updates: Partial<ExpenseCategory>) => void;
   removeExpenseCategory: (categoryId: string) => void;
@@ -33,141 +40,149 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 const initialState: AppState = {
   tours: [],
   activeTourId: null,
-  currentUser: null,
   expenseCategories: DEFAULT_EXPENSE_CATEGORIES,
+};
+
+// Helper function to get currency name from code
+const getCurrencyName = (code: string): string => {
+  const currencyNames: Record<string, string> = {
+    USD: "US Dollar",
+    EUR: "Euro",
+    GBP: "British Pound",
+    JPY: "Japanese Yen",
+    AUD: "Australian Dollar",
+    CAD: "Canadian Dollar",
+    CHF: "Swiss Franc",
+    CNY: "Chinese Yuan",
+    INR: "Indian Rupee",
+    MXN: "Mexican Peso",
+    BRL: "Brazilian Real",
+    ZAR: "South African Rand",
+    SGD: "Singapore Dollar",
+    NZD: "New Zealand Dollar",
+    THB: "Thai Baht",
+    SEK: "Swedish Krona",
+    NOK: "Norwegian Krone",
+    DKK: "Danish Krone",
+    HKD: "Hong Kong Dollar",
+    KRW: "South Korean Won",
+  };
+
+  return currencyNames[code] || code;
 };
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [state, setState] = useState<AppState>(initialState);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isInitialized, setIsInitialized] = useState(false);
 
-  // Load initial state from Supabase
+  // Load initial state from Supabase or URL parameters
   useEffect(() => {
-    const loadInitialState = async () => {
+    const initializeApp = async () => {
       try {
         // Check URL for tour data
         const urlParams = new URLSearchParams(window.location.search);
-        const tourParam = urlParams.get("tour");
+        const tourData = urlParams.get("tour");
 
-        if (tourParam) {
-          try {
-            const tourData = JSON.parse(decodeURIComponent(tourParam)) as Tour;
-            const initialState: AppState = {
-              tours: [tourData],
-              activeTourId: tourData.id,
-              currentUser: null,
-              expenseCategories: DEFAULT_EXPENSE_CATEGORIES,
-            };
-            setState(initialState);
-          } catch (error) {
-            console.error("Failed to parse tour data from URL", error);
-            // Fall back to loading from Supabase
-            const appState = await loadAppState(initialState);
-            setState(appState);
+        if (tourData) {
+          // If tour data is in URL, try to parse it
+          const parsedTour = parseShareableLink(tourData);
+          if (parsedTour) {
+            setState((prevState) => ({
+              ...prevState,
+              tours: [...prevState.tours, parsedTour],
+              activeTourId: parsedTour.id,
+            }));
+
+            // Clear URL parameters after loading
+            window.history.replaceState({}, document.title, window.location.pathname);
+            setIsInitialized(true);
+            return;
           }
-        } else {
-          // Load from Supabase if no tour data in URL
-          const appState = await loadAppState(initialState);
-          setState(appState);
         }
+
+        // If no tour data in URL, load from Supabase
+        const appState = await loadAppState(initialState);
+        setState(appState);
+        setIsInitialized(true);
       } catch (error) {
-        console.error("Failed to load initial state:", error);
-      } finally {
-        setIsLoading(false);
+        console.error("Error initializing app:", error);
+        setIsInitialized(true);
       }
     };
 
-    loadInitialState();
+    initializeApp();
   }, []);
 
   // Save state to Supabase whenever it changes
   useEffect(() => {
-    if (!isLoading) {
-      const saveStateToSupabase = async () => {
-        try {
-          await saveAppState(state);
-        } catch (error) {
-          console.error("Failed to save state to Supabase:", error);
-        }
+    if (isInitialized) {
+      saveAppState(state);
+    }
+  }, [state, isInitialized]);
+
+  // Create a new tour
+  const createTour = async (name: string, baseCurrencyCode: string): Promise<Tour | null> => {
+    try {
+      const tourId = uuidv4();
+      const now = new Date().toISOString();
+
+      const newTour: Tour = {
+        id: tourId,
+        name,
+        baseCurrencyCode: baseCurrencyCode.toUpperCase(),
+        travelers: [],
+        currencies: [
+          {
+            code: baseCurrencyCode.toUpperCase(),
+            name: getCurrencyName(baseCurrencyCode.toUpperCase()),
+            exchangeRate: 1,
+          },
+        ],
+        expenses: [],
+        payments: [],
+        createdAt: now,
+        updatedAt: now,
       };
 
-      saveStateToSupabase();
+      setState((prevState) => ({
+        ...prevState,
+        tours: [...prevState.tours, newTour],
+        activeTourId: tourId,
+      }));
+
+      return newTour;
+    } catch (error) {
+      console.error("Error creating tour:", error);
+      return null;
     }
-  }, [state, isLoading]);
-
-  const createTour = (name: string, baseCurrencyCode: string) => {
-    if (!state.currentUser) {
-      console.error("Cannot create tour: No user is logged in");
-      return;
-    }
-
-    const newTour: Tour = {
-      id: uuidv4(),
-      name,
-      baseCurrencyCode,
-      travelers: [],
-      currencies: [
-        {
-          code: baseCurrencyCode,
-          name: baseCurrencyCode,
-          exchangeRate: 1, // Base currency always has exchange rate of 1
-        },
-      ],
-      expenses: [],
-      payments: [],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      createdById: state.currentUser.id,
-      members: [state.currentUser.id],
-    };
-
-    setState((prevState) => ({
-      ...prevState,
-      tours: [...prevState.tours, newTour],
-      activeTourId: newTour.id,
-    }));
   };
 
+  // Update an existing tour
   const updateTour = (tourId: string, updates: Partial<Tour>) => {
     setState((prevState) => ({
       ...prevState,
-      tours: prevState.tours.map((tour) =>
-        tour.id === tourId
-          ? {
-              ...tour,
-              ...updates,
-              updatedAt: new Date().toISOString(),
-            }
-          : tour
-      ),
+      tours: prevState.tours.map((tour) => (tour.id === tourId ? { ...tour, ...updates, updatedAt: new Date().toISOString() } : tour)),
     }));
   };
 
-  const deleteTour = async (tourId: string) => {
-    try {
-      // Delete from Supabase first
-      await deleteSupabaseTour(tourId);
+  // Delete a tour
+  const deleteTour = (tourId: string) => {
+    setState((prevState) => {
+      const newTours = prevState.tours.filter((tour) => tour.id !== tourId);
+      const newActiveTourId = prevState.activeTourId === tourId ? (newTours.length > 0 ? newTours[0].id : null) : prevState.activeTourId;
 
-      // Then update local state
-      setState((prevState) => {
-        const newTours = prevState.tours.filter((tour) => tour.id !== tourId);
-        let newActiveTourId = prevState.activeTourId;
+      // Delete from Supabase
+      deleteSupabaseTour(tourId);
 
-        if (prevState.activeTourId === tourId) {
-          newActiveTourId = newTours.length > 0 ? newTours[0].id : null;
-        }
-
-        return {
-          ...prevState,
-          tours: newTours,
-          activeTourId: newActiveTourId,
-        };
-      });
-    } catch (error) {
-      console.error(`Failed to delete tour ${tourId}:`, error);
-    }
+      return {
+        ...prevState,
+        tours: newTours,
+        activeTourId: newActiveTourId,
+      };
+    });
   };
 
+  // Set the active tour
   const setActiveTour = (tourId: string | null) => {
     setState((prevState) => ({
       ...prevState,
@@ -175,19 +190,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }));
   };
 
+  // Add a traveler to a tour
   const addTraveler = (tourId: string, name: string) => {
+    const travelerId = uuidv4();
+
     setState((prevState) => ({
       ...prevState,
       tours: prevState.tours.map((tour) => {
         if (tour.id === tourId) {
-          const newTraveler: Traveler = {
-            id: uuidv4(),
-            name,
-          };
-
           return {
             ...tour,
-            travelers: [...tour.travelers, newTraveler],
+            travelers: [...tour.travelers, { id: travelerId, name }],
             updatedAt: new Date().toISOString(),
           };
         }
@@ -196,6 +209,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }));
   };
 
+  // Update a traveler
   const updateTraveler = (tourId: string, travelerId: string, name: string) => {
     setState((prevState) => ({
       ...prevState,
@@ -212,52 +226,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }));
   };
 
+  // Remove a traveler
   const removeTraveler = (tourId: string, travelerId: string) => {
     setState((prevState) => ({
       ...prevState,
       tours: prevState.tours.map((tour) => {
         if (tour.id === tourId) {
-          // Remove traveler
-          const updatedTravelers = tour.travelers.filter((traveler) => traveler.id !== travelerId);
-
-          // Remove expenses paid by this traveler or split with this traveler
-          const updatedExpenses = tour.expenses
-            .filter((expense) => {
-              // Keep expenses not paid by this traveler
-              if (expense.paidById === travelerId) {
-                return false;
-              }
-
-              // Remove this traveler from splits and keep expenses that still have splits
-              const updatedSplits = expense.splits.filter((split) => split.travelerId !== travelerId);
-
-              // If all splits were for this traveler, remove the expense
-              return updatedSplits.length > 0;
-            })
-            .map((expense) => {
-              // Update splits to remove this traveler
-              const updatedSplits = expense.splits.filter((split) => split.travelerId !== travelerId);
-
-              // Recalculate percentages to total 100%
-              const totalPercentage = updatedSplits.reduce((sum, split) => sum + split.percentage, 0);
-
-              if (totalPercentage > 0 && totalPercentage !== 100) {
-                const scaleFactor = 100 / totalPercentage;
-                updatedSplits.forEach((split) => {
-                  split.percentage *= scaleFactor;
-                });
-              }
-
-              return {
-                ...expense,
-                splits: updatedSplits,
-              };
-            });
-
           return {
             ...tour,
-            travelers: updatedTravelers,
-            expenses: updatedExpenses,
+            travelers: tour.travelers.filter((traveler) => traveler.id !== travelerId),
             updatedAt: new Date().toISOString(),
           };
         }
@@ -266,26 +243,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }));
   };
 
+  // Add a currency to a tour
   const addCurrency = (tourId: string, code: string, name: string, exchangeRate: number) => {
     setState((prevState) => ({
       ...prevState,
       tours: prevState.tours.map((tour) => {
         if (tour.id === tourId) {
-          // Check if currency already exists
-          const currencyExists = tour.currencies.some((c) => c.code === code);
-          if (currencyExists) {
-            return tour;
-          }
-
-          const newCurrency: Currency = {
-            code,
-            name,
-            exchangeRate,
-          };
-
           return {
             ...tour,
-            currencies: [...tour.currencies, newCurrency],
+            currencies: [...tour.currencies, { code, name, exchangeRate }],
             updatedAt: new Date().toISOString(),
           };
         }
@@ -294,6 +260,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }));
   };
 
+  // Update a currency
   const updateCurrency = (tourId: string, currencyCode: string, updates: Partial<Currency>) => {
     setState((prevState) => ({
       ...prevState,
@@ -310,24 +277,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }));
   };
 
+  // Remove a currency
   const removeCurrency = (tourId: string, currencyCode: string) => {
     setState((prevState) => ({
       ...prevState,
       tours: prevState.tours.map((tour) => {
         if (tour.id === tourId) {
-          // Check if it's the base currency
-          if (currencyCode === tour.baseCurrencyCode) {
-            // Can't remove base currency
-            return tour;
-          }
-
-          // Check if there are expenses using this currency
-          const currencyInUse = tour.expenses.some((expense) => expense.currencyCode === currencyCode);
-          if (currencyInUse) {
-            // Can't remove currency in use
-            return tour;
-          }
-
           return {
             ...tour,
             currencies: tour.currencies.filter((currency) => currency.code !== currencyCode),
@@ -339,27 +294,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }));
   };
 
-  const addExpense = (tourId: string, expenseData: Omit<Expense, "id" | "createdById" | "createdAt">) => {
-    if (!state.currentUser) {
-      console.error("Cannot add expense: No user is logged in");
-      return;
-    }
+  // Add an expense to a tour
+  const addExpense = (tourId: string, expenseData: Omit<Expense, "id" | "createdAt">) => {
+    const expenseId = uuidv4();
+    const now = new Date().toISOString();
 
     setState((prevState) => ({
       ...prevState,
       tours: prevState.tours.map((tour) => {
         if (tour.id === tourId) {
-          const newExpense: Expense = {
-            id: uuidv4(),
-            ...expenseData,
-            createdById: state.currentUser!.id,
-            createdAt: new Date().toISOString(),
-          };
-
           return {
             ...tour,
-            expenses: [...tour.expenses, newExpense],
-            updatedAt: new Date().toISOString(),
+            expenses: [
+              ...tour.expenses,
+              {
+                ...expenseData,
+                id: expenseId,
+                createdAt: now,
+              },
+            ],
+            updatedAt: now,
           };
         }
         return tour;
@@ -367,6 +321,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }));
   };
 
+  // Update an expense
   const updateExpense = (tourId: string, expenseId: string, updates: Partial<Expense>) => {
     setState((prevState) => ({
       ...prevState,
@@ -383,6 +338,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }));
   };
 
+  // Remove an expense
   const removeExpense = (tourId: string, expenseId: string) => {
     setState((prevState) => ({
       ...prevState,
@@ -399,27 +355,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }));
   };
 
-  const addPayment = (tourId: string, paymentData: Omit<PaymentRecord, "id" | "createdById" | "createdAt">) => {
-    if (!state.currentUser) {
-      console.error("Cannot add payment: No user is logged in");
-      return;
-    }
+  // Add a payment to a tour
+  const addPayment = (tourId: string, paymentData: Omit<PaymentRecord, "id" | "createdAt">) => {
+    const paymentId = uuidv4();
+    const now = new Date().toISOString();
 
     setState((prevState) => ({
       ...prevState,
       tours: prevState.tours.map((tour) => {
         if (tour.id === tourId) {
-          const newPayment: PaymentRecord = {
-            id: uuidv4(),
-            ...paymentData,
-            createdById: state.currentUser!.id,
-            createdAt: new Date().toISOString(),
-          };
-
           return {
             ...tour,
-            payments: [...tour.payments, newPayment],
-            updatedAt: new Date().toISOString(),
+            payments: [
+              ...tour.payments,
+              {
+                ...paymentData,
+                id: paymentId,
+                createdAt: now,
+              },
+            ],
+            updatedAt: now,
           };
         }
         return tour;
@@ -427,6 +382,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }));
   };
 
+  // Remove a payment
   const removePayment = (tourId: string, paymentId: string) => {
     setState((prevState) => ({
       ...prevState,
@@ -443,52 +399,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }));
   };
 
+  // Import a tour from a shareable link
   const importTourFromLink = (url: string): boolean => {
     try {
-      const tourData = parseShareableLink(url);
-      if (!tourData) {
-        return false;
-      }
-
-      // Check if tour with same ID already exists
-      const tourExists = state.tours.some((tour) => tour.id === tourData.id);
-      if (tourExists) {
-        // Generate a new ID for the imported tour
-        tourData.id = uuidv4();
-      }
+      const parsedTour = parseShareableLink(url);
+      if (!parsedTour) return false;
 
       setState((prevState) => ({
         ...prevState,
-        tours: [...prevState.tours, tourData],
-        activeTourId: tourData.id,
+        tours: [...prevState.tours, parsedTour],
+        activeTourId: parsedTour.id,
       }));
 
       return true;
     } catch (error) {
-      console.error("Failed to import tour from link", error);
+      console.error("Error importing tour from link:", error);
       return false;
     }
   };
 
-  const setCurrentUser = (user: User | null) => {
-    setState((prevState) => ({
-      ...prevState,
-      currentUser: user,
-    }));
-  };
-
+  // Add an expense category
   const addExpenseCategory = (category: Omit<ExpenseCategory, "id">) => {
-    const newCategory: ExpenseCategory = {
-      id: uuidv4(),
-      ...category,
-    };
+    const categoryId = uuidv4();
 
     setState((prevState) => ({
       ...prevState,
-      expenseCategories: [...prevState.expenseCategories, newCategory],
+      expenseCategories: [...prevState.expenseCategories, { ...category, id: categoryId }],
     }));
   };
 
+  // Update an expense category
   const updateExpenseCategory = (categoryId: string, updates: Partial<ExpenseCategory>) => {
     setState((prevState) => ({
       ...prevState,
@@ -496,6 +436,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }));
   };
 
+  // Remove an expense category
   const removeExpenseCategory = (categoryId: string) => {
     setState((prevState) => ({
       ...prevState,
@@ -503,39 +444,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }));
   };
 
-  if (isLoading) {
-    return <div>Loading...</div>;
-  }
+  const contextValue: AppContextType = {
+    state,
+    createTour,
+    updateTour,
+    deleteTour,
+    setActiveTour,
+    addTraveler,
+    updateTraveler,
+    removeTraveler,
+    addCurrency,
+    updateCurrency,
+    removeCurrency,
+    addExpense,
+    updateExpense,
+    removeExpense,
+    addPayment,
+    removePayment,
+    importTourFromLink,
+    addExpenseCategory,
+    updateExpenseCategory,
+    removeExpenseCategory,
+  };
 
-  return (
-    <AppContext.Provider
-      value={{
-        state,
-        createTour,
-        updateTour,
-        deleteTour,
-        setActiveTour,
-        addTraveler,
-        updateTraveler,
-        removeTraveler,
-        addCurrency,
-        updateCurrency,
-        removeCurrency,
-        addExpense,
-        updateExpense,
-        removeExpense,
-        addPayment,
-        removePayment,
-        importTourFromLink,
-        setCurrentUser,
-        addExpenseCategory,
-        updateExpenseCategory,
-        removeExpenseCategory,
-      }}
-    >
-      {children}
-    </AppContext.Provider>
-  );
+  return <AppContext.Provider value={contextValue}>{children}</AppContext.Provider>;
 };
 
 export const useAppContext = (): AppContextType => {

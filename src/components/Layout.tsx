@@ -1,226 +1,101 @@
+import AccountBalanceIcon from "@mui/icons-material/AccountBalance";
+import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
+import ExploreIcon from "@mui/icons-material/Explore";
 import MenuIcon from "@mui/icons-material/Menu";
-import { AppBar, Box, Button, Container, Divider, FormControl, IconButton, InputLabel, Menu, MenuItem, Paper, Select, SelectChangeEvent, Toolbar, Typography, useMediaQuery, useTheme } from "@mui/material";
+import ReceiptLongIcon from "@mui/icons-material/ReceiptLong";
+import SettingsIcon from "@mui/icons-material/Settings";
+import SwapHorizIcon from "@mui/icons-material/SwapHoriz";
+import { AppBar, Box, Container, CssBaseline, Drawer, IconButton, List, ListItem, ListItemButton, ListItemIcon, ListItemText, Toolbar, Typography, useMediaQuery, useTheme } from "@mui/material";
 import React, { useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, Outlet, useLocation } from "react-router-dom";
 import { useAppContext } from "../context/AppContext";
-import UserProfile from "./Auth/UserProfile";
+import { Tour } from "../types";
 
-interface LayoutProps {
-  children: React.ReactNode;
-}
+// Navigation items
+const navItems = [
+  { name: "Tours", path: "/", icon: <ExploreIcon /> },
+  { name: "Expenses", path: "/expenses", icon: <ReceiptLongIcon /> },
+  { name: "Settlements", path: "/settlements", icon: <SwapHorizIcon /> },
+  { name: "Balances", path: "/balances", icon: <AccountBalanceIcon /> },
+  { name: "Settings", path: "/settings", icon: <SettingsIcon /> },
+];
 
-const Layout: React.FC<LayoutProps> = ({ children }) => {
-  const { state, setActiveTour } = useAppContext();
-  const location = useLocation();
-  const { tours, activeTourId, currentUser } = state;
+const Layout: React.FC = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const location = useLocation();
+  const { state } = useAppContext();
+  const { activeTourId, tours } = state;
 
-  const [mobileMenuAnchorEl, setMobileMenuAnchorEl] = useState<null | HTMLElement>(null);
-  const isMobileMenuOpen = Boolean(mobileMenuAnchorEl);
+  const activeTour = tours.find((tour: Tour) => tour.id === activeTourId);
 
-  const handleTourChange = (event: SelectChangeEvent<string>) => {
-    setActiveTour(event.target.value);
+  const handleDrawerToggle = () => {
+    setDrawerOpen(!drawerOpen);
   };
 
-  const handleMobileMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
-    setMobileMenuAnchorEl(event.currentTarget);
-  };
-
-  const handleMobileMenuClose = () => {
-    setMobileMenuAnchorEl(null);
-  };
+  const drawer = (
+    <Box sx={{ width: 250 }} role="presentation">
+      <Toolbar sx={{ display: "flex", alignItems: "center", justifyContent: "flex-end", px: [1] }}>
+        <IconButton onClick={handleDrawerToggle}>
+          <ChevronLeftIcon />
+        </IconButton>
+      </Toolbar>
+      <List>
+        {navItems.map((item) => (
+          <ListItem key={item.name} disablePadding>
+            <ListItemButton component={Link} to={item.path} selected={location.pathname === item.path} onClick={isMobile ? handleDrawerToggle : undefined}>
+              <ListItemIcon>{item.icon}</ListItemIcon>
+              <ListItemText primary={item.name} />
+            </ListItemButton>
+          </ListItem>
+        ))}
+      </List>
+    </Box>
+  );
 
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
-      <AppBar position="static">
+    <Box sx={{ display: "flex", minHeight: "100vh" }}>
+      <CssBaseline />
+      <AppBar
+        position="fixed"
+        sx={{
+          zIndex: (theme) => theme.zIndex.drawer + 1,
+          backgroundColor: theme.palette.primary.main,
+        }}
+      >
         <Toolbar>
-          <Typography variant="h6" component={Link} to="/" sx={{ flexGrow: 1, textDecoration: "none", color: "white" }}>
-            Travel Expense Tracker
+          <IconButton color="inherit" aria-label="open drawer" edge="start" onClick={handleDrawerToggle} sx={{ mr: 2 }}>
+            <MenuIcon />
+          </IconButton>
+          <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
+            {activeTour ? `${activeTour.name}` : "Travel Expense Tracker"}
           </Typography>
-
-          {tours.length > 0 && (
-            <>
-              {isMobile ? (
-                <>
-                  <FormControl variant="outlined" size="small" sx={{ minWidth: 120, backgroundColor: "rgba(255, 255, 255, 0.15)", borderRadius: 1, mr: 1 }}>
-                    <InputLabel id="tour-select-label" sx={{ color: "white" }}>
-                      Tour
-                    </InputLabel>
-                    <Select labelId="tour-select-label" id="tour-select" value={activeTourId || ""} onChange={handleTourChange} label="Tour" sx={{ color: "white" }}>
-                      {tours.map((tour) => (
-                        <MenuItem key={tour.id} value={tour.id}>
-                          {tour.name}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-
-                  <IconButton size="large" edge="end" color="inherit" aria-label="menu" onClick={handleMobileMenuOpen}>
-                    <MenuIcon />
-                  </IconButton>
-
-                  <Menu
-                    anchorEl={mobileMenuAnchorEl}
-                    open={isMobileMenuOpen}
-                    onClose={handleMobileMenuClose}
-                    PaperProps={{
-                      elevation: 3,
-                      sx: { mt: 1.5 },
-                    }}
-                  >
-                    <MenuItem
-                      component={Link}
-                      to="/tours"
-                      onClick={handleMobileMenuClose}
-                      selected={location.pathname === "/tours"}
-                      sx={{
-                        minWidth: 150,
-                        bgcolor: location.pathname === "/tours" ? "primary.light" : "inherit",
-                        color: location.pathname === "/tours" ? "white" : "inherit",
-                        "&:hover": {
-                          bgcolor: location.pathname === "/tours" ? "primary.main" : "action.hover",
-                        },
-                      }}
-                    >
-                      Manage Tours
-                    </MenuItem>
-
-                    {activeTourId && (
-                      <>
-                        <MenuItem
-                          component={Link}
-                          to="/travelers"
-                          onClick={handleMobileMenuClose}
-                          selected={location.pathname === "/travelers"}
-                          sx={{
-                            minWidth: 150,
-                            bgcolor: location.pathname === "/travelers" ? "primary.light" : "inherit",
-                            color: location.pathname === "/travelers" ? "white" : "inherit",
-                            "&:hover": {
-                              bgcolor: location.pathname === "/travelers" ? "primary.main" : "action.hover",
-                            },
-                          }}
-                        >
-                          Travelers
-                        </MenuItem>
-                        <MenuItem
-                          component={Link}
-                          to="/currencies"
-                          onClick={handleMobileMenuClose}
-                          selected={location.pathname === "/currencies"}
-                          sx={{
-                            minWidth: 150,
-                            bgcolor: location.pathname === "/currencies" ? "primary.light" : "inherit",
-                            color: location.pathname === "/currencies" ? "white" : "inherit",
-                            "&:hover": {
-                              bgcolor: location.pathname === "/currencies" ? "primary.main" : "action.hover",
-                            },
-                          }}
-                        >
-                          Currencies
-                        </MenuItem>
-                        <MenuItem
-                          component={Link}
-                          to="/expenses"
-                          onClick={handleMobileMenuClose}
-                          selected={location.pathname === "/expenses"}
-                          sx={{
-                            minWidth: 150,
-                            bgcolor: location.pathname === "/expenses" ? "primary.light" : "inherit",
-                            color: location.pathname === "/expenses" ? "white" : "inherit",
-                            "&:hover": {
-                              bgcolor: location.pathname === "/expenses" ? "primary.main" : "action.hover",
-                            },
-                          }}
-                        >
-                          Expenses
-                        </MenuItem>
-                        <MenuItem
-                          component={Link}
-                          to="/settlements"
-                          onClick={handleMobileMenuClose}
-                          selected={location.pathname === "/settlements"}
-                          sx={{
-                            minWidth: 150,
-                            bgcolor: location.pathname === "/settlements" ? "primary.light" : "inherit",
-                            color: location.pathname === "/settlements" ? "white" : "inherit",
-                            "&:hover": {
-                              bgcolor: location.pathname === "/settlements" ? "primary.main" : "action.hover",
-                            },
-                          }}
-                        >
-                          Settlements
-                        </MenuItem>
-                      </>
-                    )}
-                  </Menu>
-                </>
-              ) : (
-                <Box sx={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 2 }}>
-                  <FormControl variant="outlined" size="small" sx={{ minWidth: 150, backgroundColor: "rgba(255, 255, 255, 0.15)", borderRadius: 1 }}>
-                    <InputLabel id="tour-select-label" sx={{ color: "white" }}>
-                      Tour
-                    </InputLabel>
-                    <Select labelId="tour-select-label" id="tour-select" value={activeTourId || ""} onChange={handleTourChange} label="Tour" sx={{ color: "white" }}>
-                      {tours.map((tour) => (
-                        <MenuItem key={tour.id} value={tour.id}>
-                          {tour.name}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-
-                  <Box sx={{ display: "flex", gap: 1 }}>
-                    <Button component={Link} to="/tours" variant={location.pathname === "/tours" ? "contained" : "text"} color="inherit">
-                      Manage Tours
-                    </Button>
-
-                    {activeTourId && (
-                      <>
-                        <Button component={Link} to="/travelers" variant={location.pathname === "/travelers" ? "contained" : "text"} color="inherit">
-                          Travelers
-                        </Button>
-                        <Button component={Link} to="/currencies" variant={location.pathname === "/currencies" ? "contained" : "text"} color="inherit">
-                          Currencies
-                        </Button>
-                        <Button component={Link} to="/expenses" variant={location.pathname === "/expenses" ? "contained" : "text"} color="inherit">
-                          Expenses
-                        </Button>
-                        <Button component={Link} to="/settlements" variant={location.pathname === "/settlements" ? "contained" : "text"} color="inherit">
-                          Settlements
-                        </Button>
-                      </>
-                    )}
-                  </Box>
-                </Box>
-              )}
-            </>
-          )}
-
-          {currentUser && (
-            <Box sx={{ ml: 2 }}>
-              <UserProfile user={currentUser} />
-            </Box>
-          )}
         </Toolbar>
       </AppBar>
-
-      <Container component="main" sx={{ flexGrow: 1, py: 4 }}>
-        <Paper elevation={2} sx={{ p: 3 }}>
-          {children}
-        </Paper>
-      </Container>
-
-      <Box component="footer" sx={{ py: 3, bgcolor: "background.paper", mt: "auto" }}>
-        <Container maxWidth="lg">
-          <Divider sx={{ mb: 2 }} />
-          <Typography variant="body2" color="text.secondary" align="center">
-            &copy; {new Date().getFullYear()} Travel Expense Tracker | Made with ❤️ by{" "}
-            <a href="https://faisalahammad.com" target="_blank" rel="noopener noreferrer" style={{ color: "inherit", textDecoration: "underline" }}>
-              Faisal
-            </a>
-          </Typography>
+      <Drawer
+        variant={isMobile ? "temporary" : "permanent"}
+        open={isMobile ? drawerOpen : true}
+        onClose={isMobile ? handleDrawerToggle : undefined}
+        sx={{
+          width: 250,
+          flexShrink: 0,
+          [`& .MuiDrawer-paper`]: { width: 250, boxSizing: "border-box" },
+        }}
+      >
+        {drawer}
+      </Drawer>
+      <Box
+        component="main"
+        sx={{
+          flexGrow: 1,
+          p: 3,
+          width: { sm: `calc(100% - 250px)` },
+          mt: "64px", // AppBar height
+        }}
+      >
+        <Container maxWidth="lg" sx={{ py: 2 }}>
+          <Outlet />
         </Container>
       </Box>
     </Box>
