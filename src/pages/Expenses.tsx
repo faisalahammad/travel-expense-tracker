@@ -28,13 +28,12 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import Icon from "@mui/material/Icon";
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import ExpenseForm from "../components/ExpenseForm";
 import { useAppContext } from "../context/AppContext";
 import { Expense } from "../types";
-import { formatCurrency } from "../utils";
+import { convertCurrency, formatCurrency } from "../utils";
 
 const Expenses: React.FC = () => {
   const { state, addExpense, updateExpense, removeExpense } = useAppContext();
@@ -143,8 +142,74 @@ const Expenses: React.FC = () => {
     })
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
+  // Group expenses by date
+  const groupedExpenses: Record<string, Expense[]> = {};
+  filteredExpenses.forEach((expense) => {
+    const dateKey = new Date(expense.date).toLocaleDateString();
+    if (!groupedExpenses[dateKey]) {
+      groupedExpenses[dateKey] = [];
+    }
+    groupedExpenses[dateKey].push(expense);
+  });
+
+  // Sort dates in descending order
+  const sortedDates = Object.keys(groupedExpenses).sort((a, b) => {
+    return new Date(b).getTime() - new Date(a).getTime();
+  });
+
   const getCategoryById = (categoryId: string) => {
     return expenseCategories.find((category) => category.id === categoryId);
+  };
+
+  // Helper function to display the equivalent amount in base currency
+  const displayEquivalentAmount = (expense: Expense) => {
+    if (expense.currencyCode === activeTour.baseCurrencyCode) {
+      return null;
+    }
+
+    // Use the pre-calculated baseAmount if available, otherwise calculate it
+    let baseAmount = 0;
+    if (expense.baseAmount !== undefined) {
+      baseAmount = expense.baseAmount;
+    } else {
+      // Calculate the base amount using the exchange rate
+      const currency = activeTour.currencies.find((c) => c.code === expense.currencyCode);
+      if (currency) {
+        baseAmount = expense.amount * currency.exchangeRate;
+      } else {
+        baseAmount = expense.amount; // Fallback if currency not found
+      }
+    }
+
+    return (
+      <Typography variant="caption" color="text.secondary" display="block">
+        {formatCurrency(baseAmount, activeTour.baseCurrencyCode)}
+      </Typography>
+    );
+  };
+
+  // Helper function to get the base amount for a split
+  const getSplitBaseAmount = (split: any, expense: any) => {
+    // Use the pre-calculated baseAmount if available
+    if (split.baseAmount !== undefined) {
+      return split.baseAmount;
+    }
+
+    // If expense has baseAmount, calculate proportionally
+    if (expense.baseAmount !== undefined) {
+      return split.amount * (expense.baseAmount / expense.amount);
+    }
+
+    // Otherwise calculate using the exchange rate
+    if (expense.currencyCode !== activeTour.baseCurrencyCode) {
+      const currency = activeTour.currencies.find((c) => c.code === expense.currencyCode);
+      if (currency) {
+        return split.amount * currency.exchangeRate;
+      }
+    }
+
+    // Fallback
+    return split.amount;
   };
 
   return (
@@ -219,7 +284,7 @@ const Expenses: React.FC = () => {
                             fontSize: "0.8rem",
                           }}
                         >
-                          <Icon fontSize="small">{category.icon}</Icon>
+                          {category.name.charAt(0)}
                         </Avatar>
                         {category.name}
                       </Box>
@@ -259,88 +324,100 @@ const Expenses: React.FC = () => {
           No expenses found. Add your first expense to get started.
         </Alert>
       ) : (
-        <TableContainer component={Paper}>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>Date</TableCell>
-                <TableCell>Description</TableCell>
-                <TableCell>Category</TableCell>
-                <TableCell>Paid By</TableCell>
-                <TableCell align="right">Amount</TableCell>
-                <TableCell align="right">Actions</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {filteredExpenses.map((expense) => {
-                const category = getCategoryById(expense.categoryId);
-                return (
-                  <React.Fragment key={expense.id}>
-                    <TableRow hover>
-                      <TableCell>{new Date(expense.date).toLocaleDateString()}</TableCell>
-                      <TableCell>{expense.description}</TableCell>
-                      <TableCell>
-                        {category && (
-                          <Chip
-                            avatar={
-                              <Avatar sx={{ bgcolor: category.color }}>
-                                <Icon fontSize="small">{category.icon}</Icon>
-                              </Avatar>
-                            }
-                            label={category.name}
-                            size="small"
-                          />
-                        )}
-                      </TableCell>
-                      <TableCell>{getTravelerName(expense.paidById)}</TableCell>
-                      <TableCell align="right">{formatCurrency(expense.amount, expense.currencyCode)}</TableCell>
-                      <TableCell align="right">
-                        <IconButton size="small" onClick={() => handleToggleExpand(expense.id)}>
-                          {expandedExpenseId === expense.id ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-                        </IconButton>
-                        <IconButton size="small" onClick={() => handleOpenExpenseForm(expense)}>
-                          <EditIcon />
-                        </IconButton>
-                        <IconButton size="small" onClick={() => handleDeleteDialogOpen(expense.id)}>
-                          <DeleteIcon />
-                        </IconButton>
-                      </TableCell>
-                    </TableRow>
+        <Box>
+          {sortedDates.map((dateKey) => (
+            <Box key={dateKey} sx={{ mb: 4 }}>
+              <Paper sx={{ p: 2, mb: 1, bgcolor: "primary.light" }}>
+                <Typography variant="h6" color="white">
+                  {new Date(dateKey).toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+                </Typography>
+              </Paper>
+
+              <TableContainer component={Paper}>
+                <Table>
+                  <TableHead>
                     <TableRow>
-                      <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={6}>
-                        <Collapse in={expandedExpenseId === expense.id} timeout="auto" unmountOnExit>
-                          <Box sx={{ margin: 2 }}>
-                            <Typography variant="h6" gutterBottom component="div">
-                              Split Details
-                            </Typography>
-                            <Table size="small">
-                              <TableHead>
-                                <TableRow>
-                                  <TableCell>Traveler</TableCell>
-                                  <TableCell align="right">Amount</TableCell>
-                                  <TableCell align="right">Percentage</TableCell>
-                                </TableRow>
-                              </TableHead>
-                              <TableBody>
-                                {expense.splits.map((split) => (
-                                  <TableRow key={split.travelerId}>
-                                    <TableCell>{getTravelerName(split.travelerId)}</TableCell>
-                                    <TableCell align="right">{formatCurrency(split.amount, expense.currencyCode)}</TableCell>
-                                    <TableCell align="right">{((split.amount / expense.amount) * 100).toFixed(1)}%</TableCell>
-                                  </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
-                          </Box>
-                        </Collapse>
-                      </TableCell>
+                      <TableCell>Description</TableCell>
+                      <TableCell>Category</TableCell>
+                      <TableCell>Paid By</TableCell>
+                      <TableCell align="right">Amount</TableCell>
+                      <TableCell align="right">Actions</TableCell>
                     </TableRow>
-                  </React.Fragment>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </TableContainer>
+                  </TableHead>
+                  <TableBody>
+                    {groupedExpenses[dateKey].map((expense) => {
+                      const category = getCategoryById(expense.categoryId);
+                      return (
+                        <React.Fragment key={expense.id}>
+                          <TableRow hover>
+                            <TableCell>{expense.description}</TableCell>
+                            <TableCell>{category && <Chip avatar={<Avatar sx={{ bgcolor: category.color }}>{category.name.charAt(0)}</Avatar>} label={category.name} size="small" />}</TableCell>
+                            <TableCell>{getTravelerName(expense.paidById)}</TableCell>
+                            <TableCell align="right">
+                              {formatCurrency(expense.amount, expense.currencyCode)}
+                              {displayEquivalentAmount(expense)}
+                            </TableCell>
+                            <TableCell align="right">
+                              <IconButton size="small" onClick={() => handleToggleExpand(expense.id)}>
+                                {expandedExpenseId === expense.id ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                              </IconButton>
+                              <IconButton size="small" onClick={() => handleOpenExpenseForm(expense)}>
+                                <EditIcon />
+                              </IconButton>
+                              <IconButton size="small" onClick={() => handleDeleteDialogOpen(expense.id)}>
+                                <DeleteIcon />
+                              </IconButton>
+                            </TableCell>
+                          </TableRow>
+                          <TableRow>
+                            <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={6}>
+                              <Collapse in={expandedExpenseId === expense.id} timeout="auto" unmountOnExit>
+                                <Box sx={{ margin: 2 }}>
+                                  <Typography variant="h6" gutterBottom component="div">
+                                    Split Details
+                                  </Typography>
+                                  <Table size="small">
+                                    <TableHead>
+                                      <TableRow>
+                                        <TableCell>Traveler</TableCell>
+                                        <TableCell align="right">Amount</TableCell>
+                                        <TableCell align="right">Percentage</TableCell>
+                                      </TableRow>
+                                    </TableHead>
+                                    <TableBody>
+                                      {expense.splits.map((split) => {
+                                        const baseCurrencyAmount = expense.currencyCode !== activeTour.baseCurrencyCode ? convertCurrency(split.amount, expense.currencyCode, activeTour.baseCurrencyCode, activeTour.currencies) : split.amount;
+
+                                        return (
+                                          <TableRow key={split.travelerId}>
+                                            <TableCell>{getTravelerName(split.travelerId)}</TableCell>
+                                            <TableCell align="right">
+                                              {formatCurrency(split.amount, expense.currencyCode)}
+                                              {expense.currencyCode !== activeTour.baseCurrencyCode && (
+                                                <Typography variant="caption" color="text.secondary" display="block">
+                                                  or {formatCurrency(getSplitBaseAmount(split, expense), activeTour.baseCurrencyCode)}
+                                                </Typography>
+                                              )}
+                                            </TableCell>
+                                            <TableCell align="right">{((split.amount / expense.amount) * 100).toFixed(1)}%</TableCell>
+                                          </TableRow>
+                                        );
+                                      })}
+                                    </TableBody>
+                                  </Table>
+                                </Box>
+                              </Collapse>
+                            </TableCell>
+                          </TableRow>
+                        </React.Fragment>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Box>
+          ))}
+        </Box>
       )}
 
       {/* Delete Confirmation Dialog */}

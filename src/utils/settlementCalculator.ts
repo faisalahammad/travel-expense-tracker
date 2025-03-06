@@ -1,5 +1,12 @@
-import { Settlement, Tour } from "../types";
-import { convertCurrency } from "./index";
+import { Tour } from "../types";
+
+// Define the Settlement interface locally if it's not exported from types
+interface Settlement {
+  fromTravelerId: string;
+  toTravelerId: string;
+  amount: number;
+  currencyCode: string;
+}
 
 /**
  * Calculate the net balance for each traveler based on expenses and payments
@@ -17,14 +24,56 @@ export const calculateBalances = (tour: Tour): Record<string, number> => {
 
   // Process expenses
   expenses.forEach((expense) => {
-    const expenseAmount = expense.currencyCode !== baseCurrencyCode ? convertCurrency(expense.amount, expense.currencyCode, baseCurrencyCode, currencies) : expense.amount;
+    // Get the base amount (amount in base currency)
+    let expenseAmount = 0;
+
+    // Use the pre-calculated baseAmount if available
+    if ((expense as any).baseAmount !== undefined) {
+      expenseAmount = (expense as any).baseAmount;
+    } else {
+      // Otherwise calculate using the exchange rate
+      if (expense.currencyCode !== baseCurrencyCode) {
+        const currency = currencies.find((c) => c.code === expense.currencyCode);
+        if (currency) {
+          // If 1 USD = 124.64 BDT, then 1200 USD should be 1200 * 124.64 = 149,568 BDT
+          expenseAmount = expense.amount * currency.exchangeRate;
+        } else {
+          expenseAmount = expense.amount;
+        }
+      } else {
+        expenseAmount = expense.amount;
+      }
+    }
 
     // The person who paid gets credit for the full amount
     balances[expense.paidById] += expenseAmount;
 
     // Each person who benefited from the expense gets debited their share
     expense.splits.forEach((split) => {
-      const splitAmount = expense.currencyCode !== baseCurrencyCode ? convertCurrency(split.amount, expense.currencyCode, baseCurrencyCode, currencies) : split.amount;
+      // Get the base amount for the split
+      let splitAmount = 0;
+
+      // Use the pre-calculated baseAmount if available
+      if ((split as any).baseAmount !== undefined) {
+        splitAmount = (split as any).baseAmount;
+      } else {
+        // If expense has baseAmount, calculate proportionally
+        if ((expense as any).baseAmount !== undefined) {
+          splitAmount = split.amount * ((expense as any).baseAmount / expense.amount);
+        } else {
+          // Otherwise calculate using the exchange rate
+          if (expense.currencyCode !== baseCurrencyCode) {
+            const currency = currencies.find((c) => c.code === expense.currencyCode);
+            if (currency) {
+              splitAmount = split.amount * currency.exchangeRate;
+            } else {
+              splitAmount = split.amount;
+            }
+          } else {
+            splitAmount = split.amount;
+          }
+        }
+      }
 
       balances[split.travelerId] -= splitAmount;
     });
@@ -33,7 +82,15 @@ export const calculateBalances = (tour: Tour): Record<string, number> => {
   // Process payments
   if (payments && payments.length > 0) {
     payments.forEach((payment) => {
-      const paymentAmount = payment.currencyCode !== baseCurrencyCode ? convertCurrency(payment.amount, payment.currencyCode, baseCurrencyCode, currencies) : payment.amount;
+      // Convert payment to base currency if needed
+      let paymentAmount = payment.amount;
+      if (payment.currencyCode !== baseCurrencyCode) {
+        const currency = currencies.find((c) => c.code === payment.currencyCode);
+        if (currency) {
+          // If 1 USD = 124.64 BDT, then 1200 USD should be 1200 * 124.64 = 149,568 BDT
+          paymentAmount = payment.amount * currency.exchangeRate;
+        }
+      }
 
       // The person who made the payment (from) gets debited
       balances[payment.fromTravelerId] -= paymentAmount;

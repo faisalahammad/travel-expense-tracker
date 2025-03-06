@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from "uuid";
-import { Currency, Settlement, Tour, Traveler } from "../types";
+import { Currency, Tour, Traveler } from "../types";
 import { calculateSettlements as calculateSettlementsFromCalculator } from "./settlementCalculator";
 
 // Generate a unique ID
@@ -11,7 +11,19 @@ export const generateId = (): string => {
 export const formatCurrency = (amount: number, currencyCode: string): string => {
   // Ensure the amount is rounded to exactly 2 decimal places
   const roundedAmount = Math.round(amount * 100) / 100;
-  return `${currencyCode} ${roundedAmount.toFixed(2)}`;
+
+  try {
+    // Try to use Intl.NumberFormat for proper currency formatting
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: currencyCode,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(roundedAmount);
+  } catch (error) {
+    // Fallback in case the currency code is invalid
+    return `${currencyCode} ${roundedAmount.toFixed(2)}`;
+  }
 };
 
 // Convert amount from one currency to another
@@ -28,15 +40,15 @@ export const convertCurrency = (amount: number, fromCurrencyCode: string, toCurr
   }
 
   // Convert to base currency first, then to target currency
-  const amountInBaseCurrency = amount / fromCurrency.exchangeRate;
-  const amountInTargetCurrency = amountInBaseCurrency * toCurrency.exchangeRate;
+  // If exchange rate is 1 Peso = 2.17 BDT, then 93 Peso should be 93 * 2.17 = 201.81 BDT
+  const amountInTargetCurrency = amount * fromCurrency.exchangeRate;
 
   // Round to 2 decimal places to avoid floating point issues
   return Math.round(amountInTargetCurrency * 100) / 100;
 };
 
 // Calculate settlements (who owes whom)
-export const calculateSettlements = (tour: Tour): Settlement[] => {
+export const calculateSettlements = (tour: Tour): any[] => {
   return calculateSettlementsFromCalculator(tour);
 };
 

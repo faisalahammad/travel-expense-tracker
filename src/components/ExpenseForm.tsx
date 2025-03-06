@@ -1,10 +1,10 @@
 import CloseIcon from "@mui/icons-material/Close";
-import { Avatar, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, Divider, FormControl, FormHelperText, Grid, IconButton, InputAdornment, InputLabel, MenuItem, Select, TextField, Typography } from "@mui/material";
-import Icon from "@mui/material/Icon";
+import { Avatar, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, FormControl, FormHelperText, Grid, IconButton, InputAdornment, InputLabel, MenuItem, Select, TextField, Typography } from "@mui/material";
 import { DatePicker } from "@mui/x-date-pickers/DatePicker";
 import React, { useEffect, useState } from "react";
 import { useAppContext } from "../context/AppContext";
 import { Expense, ExpenseSplit, Traveler } from "../types";
+import { convertCurrency } from "../utils";
 
 interface ExpenseFormProps {
   open: boolean;
@@ -27,6 +27,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ open, onClose, initialExpense
   const [splitType, setSplitType] = useState<"equal" | "custom">("equal");
   const [splits, setSplits] = useState<ExpenseSplit[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [baseAmount, setBaseAmount] = useState<number | null>(null);
 
   useEffect(() => {
     if (initialExpense) {
@@ -57,6 +58,17 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ open, onClose, initialExpense
       }
     }
   }, [initialExpense, activeTour, expenseCategories]);
+
+  // Update base amount when currency or amount changes
+  useEffect(() => {
+    if (activeTour && currencyCode && amount && currencyCode !== activeTour.baseCurrencyCode) {
+      const parsedAmount = parseFloat(amount) || 0;
+      const convertedAmount = convertCurrency(parsedAmount, currencyCode, activeTour.baseCurrencyCode, activeTour.currencies);
+      setBaseAmount(convertedAmount);
+    } else {
+      setBaseAmount(null);
+    }
+  }, [currencyCode, amount, activeTour]);
 
   const handleSplitAmountChange = (travelerId: string, value: string) => {
     const newAmount = parseFloat(value) || 0;
@@ -108,24 +120,68 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ open, onClose, initialExpense
 
     const parsedAmount = parseFloat(amount);
 
+    // Calculate the base amount using the exchange rate
+    let baseAmount = parsedAmount;
+
+    // If the currency is different from the base currency, convert it
+    if (currencyCode !== activeTour.baseCurrencyCode) {
+      const currency = activeTour.currencies.find((c) => c.code === currencyCode);
+      if (currency) {
+        // If 1 USD = 124.64 BDT, then 1200 USD should be 1200 * 124.64 = 149,568 BDT
+        baseAmount = parsedAmount * currency.exchangeRate;
+        console.log(`Converting ${parsedAmount} ${currencyCode} to ${baseAmount} ${activeTour.baseCurrencyCode} using rate ${currency.exchangeRate}`);
+      }
+    }
+
+    // Round to 2 decimal places
+    baseAmount = Math.round(baseAmount * 100) / 100;
+
     let finalSplits = [...splits];
     if (splitType === "equal" && activeTour.travelers.length > 0) {
       const equalAmount = parsedAmount / activeTour.travelers.length;
+      const equalBaseAmount = baseAmount / activeTour.travelers.length;
+
+      // Round to 2 decimal places
+      const roundedEqualAmount = Math.round(equalAmount * 100) / 100;
+      const roundedEqualBaseAmount = Math.round(equalBaseAmount * 100) / 100;
+
       finalSplits = activeTour.travelers.map((traveler) => ({
         travelerId: traveler.id,
-        amount: equalAmount,
+        amount: roundedEqualAmount,
+        baseAmount: roundedEqualBaseAmount,
+        percentage: 100 / activeTour.travelers.length,
       }));
+    } else {
+      // For custom splits, calculate the base amount for each split
+      finalSplits = splits.map((split) => {
+        let splitBaseAmount = split.amount;
+
+        // If the currency is different from the base currency, convert it
+        if (currencyCode !== activeTour.baseCurrencyCode) {
+          const currency = activeTour.currencies.find((c) => c.code === currencyCode);
+          if (currency) {
+            splitBaseAmount = split.amount * currency.exchangeRate;
+          }
+        }
+
+        // Round to 2 decimal places
+        splitBaseAmount = Math.round(splitBaseAmount * 100) / 100;
+
+        return {
+          ...split,
+          baseAmount: splitBaseAmount,
+          percentage: (split.amount / parsedAmount) * 100,
+        };
+      });
     }
 
-    // Store the original amount and currency for reference
-    const originalAmount = parsedAmount;
-    const originalCurrency = currencyCode;
-
-    // Create the expense data with the original currency information
+    // Create the expense data with both original and base currency information
     const expenseData: Omit<Expense, "id" | "createdAt"> = {
       description,
       amount: parsedAmount,
       currencyCode,
+      baseAmount: baseAmount,
+      baseCurrencyCode: activeTour.baseCurrencyCode,
       date: date?.toISOString() || new Date().toISOString(),
       paidById,
       categoryId,
@@ -133,6 +189,12 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ open, onClose, initialExpense
     };
 
     onSave(expenseData);
+
+    // Reset the form if it's a new expense (not editing)
+    if (!initialExpense) {
+      handleReset();
+    }
+
     onClose();
   };
 
@@ -151,6 +213,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ open, onClose, initialExpense
       })) || []
     );
     setErrors({});
+    setBaseAmount(null);
   };
 
   const findTravelerById = (id: string): Traveler | undefined => {
@@ -187,6 +250,20 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ open, onClose, initialExpense
           </Grid>
 
           <Grid item xs={12} sm={6}>
+            <FormControl fullWidth error={!!errors.currencyCode}>
+              <InputLabel>Currency</InputLabel>
+              <Select value={currencyCode} onChange={(e) => setCurrencyCode(e.target.value)} label="Currency">
+                {activeTour.currencies.map((currency) => (
+                  <MenuItem key={currency.code} value={currency.code}>
+                    {currency.code} - {currency.name} {currency.code === activeTour.baseCurrencyCode && "(Base)"}
+                  </MenuItem>
+                ))}
+              </Select>
+              {errors.currencyCode && <FormHelperText>{errors.currencyCode}</FormHelperText>}
+            </FormControl>
+          </Grid>
+
+          <Grid item xs={12} sm={6}>
             <TextField
               fullWidth
               label="Amount"
@@ -199,27 +276,18 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ open, onClose, initialExpense
               error={!!errors.amount}
               helperText={errors.amount}
             />
-          </Grid>
-
-          <Grid item xs={12} sm={6}>
-            <FormControl fullWidth error={!!errors.currencyCode}>
-              <InputLabel>Currency</InputLabel>
-              <Select value={currencyCode} onChange={(e) => setCurrencyCode(e.target.value)} label="Currency">
-                {activeTour.currencies.map((currency) => (
-                  <MenuItem key={currency.code} value={currency.code}>
-                    {currency.code} - {currency.name}
-                  </MenuItem>
-                ))}
-              </Select>
-              {errors.currencyCode && <FormHelperText>{errors.currencyCode}</FormHelperText>}
-            </FormControl>
+            {baseAmount !== null && (
+              <Typography variant="caption" color="text.secondary">
+                Equivalent: {activeTour.baseCurrencyCode} {baseAmount.toFixed(2)}
+              </Typography>
+            )}
           </Grid>
 
           <Grid item xs={12} sm={6}>
             <DatePicker
               label="Date"
               value={date}
-              onChange={(newDate: Date | null) => setDate(newDate)}
+              onChange={(newDate) => setDate(newDate)}
               slotProps={{
                 textField: {
                   fullWidth: true,
@@ -260,7 +328,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ open, onClose, initialExpense
                           fontSize: "0.8rem",
                         }}
                       >
-                        <Icon fontSize="small">{category.icon}</Icon>
+                        {category.name.charAt(0)}
                       </Avatar>
                       {category.name}
                     </Box>
@@ -272,63 +340,72 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ open, onClose, initialExpense
           </Grid>
 
           <Grid item xs={12}>
-            <Divider sx={{ my: 2 }}>
-              <Chip label="Split Details" />
-            </Divider>
+            <Typography variant="subtitle1" gutterBottom>
+              Split
+            </Typography>
+            <Box sx={{ display: "flex", mb: 2 }}>
+              <Button variant={splitType === "equal" ? "contained" : "outlined"} onClick={() => setSplitType("equal")} sx={{ mr: 1 }} size="small">
+                Equal
+              </Button>
+              <Button variant={splitType === "custom" ? "contained" : "outlined"} onClick={() => setSplitType("custom")} size="small">
+                Custom
+              </Button>
+            </Box>
 
-            <FormControl fullWidth sx={{ mb: 2 }}>
-              <InputLabel>Split Type</InputLabel>
-              <Select value={splitType} onChange={(e) => setSplitType(e.target.value as "equal" | "custom")} label="Split Type">
-                <MenuItem value="equal">Equal Split</MenuItem>
-                <MenuItem value="custom">Custom Split</MenuItem>
-              </Select>
-            </FormControl>
+            {errors.splits && (
+              <Typography color="error" variant="caption" sx={{ mb: 2, display: "block" }}>
+                {errors.splits}
+              </Typography>
+            )}
 
             {splitType === "equal" ? (
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                This expense will be split equally among all travelers ({activeTour.travelers.length} travelers).
-              </Typography>
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="body2" color="text.secondary">
+                  This expense will be split equally among all travelers.
+                </Typography>
+                <Box sx={{ mt: 1, display: "flex", flexWrap: "wrap", gap: 1 }}>
+                  {activeTour.travelers.map((traveler) => (
+                    <Chip key={traveler.id} label={traveler.name} />
+                  ))}
+                </Box>
+              </Box>
             ) : (
-              <>
-                {errors.splits && (
-                  <Typography color="error" variant="body2" sx={{ mb: 2 }}>
-                    {errors.splits}
-                  </Typography>
-                )}
-                <Grid container spacing={2}>
-                  {splits.map((split) => {
-                    const traveler = findTravelerById(split.travelerId);
-                    if (!traveler) return null;
+              <Box>
+                {splits.map((split, index) => {
+                  const traveler = findTravelerById(split.travelerId);
+                  if (!traveler) return null;
 
-                    return (
-                      <Grid item xs={12} sm={6} key={split.travelerId}>
-                        <TextField
-                          fullWidth
-                          label={`${traveler.name}'s Share`}
-                          type="number"
-                          value={split.amount || ""}
-                          onChange={(e) => handleSplitAmountChange(split.travelerId, e.target.value)}
-                          InputProps={{
-                            startAdornment: currencyCode ? <InputAdornment position="start">{currencyCode}</InputAdornment> : null,
-                          }}
-                        />
-                      </Grid>
-                    );
-                  })}
-                </Grid>
-              </>
+                  return (
+                    <Box key={split.travelerId} sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+                      <Typography variant="body2" sx={{ width: "120px" }}>
+                        {traveler.name}
+                      </Typography>
+                      <TextField
+                        size="small"
+                        type="number"
+                        value={split.amount || ""}
+                        onChange={(e) => handleSplitAmountChange(split.travelerId, e.target.value)}
+                        InputProps={{
+                          startAdornment: <InputAdornment position="start">{currencyCode}</InputAdornment>,
+                        }}
+                        sx={{ width: "150px" }}
+                      />
+                      {amount && (
+                        <Typography variant="caption" color="text.secondary" sx={{ ml: 2 }}>
+                          {((split.amount / parseFloat(amount || "0")) * 100).toFixed(1)}%
+                        </Typography>
+                      )}
+                    </Box>
+                  );
+                })}
+              </Box>
             )}
           </Grid>
         </Grid>
       </DialogContent>
 
       <DialogActions>
-        <Button onClick={handleReset} color="inherit">
-          Reset
-        </Button>
-        <Button onClick={onClose} color="inherit">
-          Cancel
-        </Button>
+        <Button onClick={onClose}>Cancel</Button>
         <Button onClick={handleSubmit} variant="contained" color="primary">
           Save
         </Button>

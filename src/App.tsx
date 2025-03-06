@@ -3,7 +3,6 @@ import { Navigate, Route, BrowserRouter as Router, Routes } from "react-router-d
 import Layout from "./components/Layout";
 import { AppProvider } from "./context/AppContext";
 import "./index.css";
-import Balances from "./pages/Balances";
 import Currencies from "./pages/Currencies";
 import Expenses from "./pages/Expenses";
 import Home from "./pages/Home";
@@ -101,7 +100,6 @@ const AppRoutes: React.FC = () => {
           <Route path="currencies" element={<Currencies />} />
           <Route path="expenses" element={<Expenses />} />
           <Route path="settlements" element={<Settlements />} />
-          <Route path="balances" element={<Balances />} />
           <Route path="settings" element={<Settings />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>

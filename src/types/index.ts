@@ -12,13 +12,13 @@ export interface Currency {
 export interface ExpenseCategory {
   id: string;
   name: string;
-  icon: string;
   color: string;
 }
 
 export interface ExpenseSplit {
   travelerId: string;
   amount: number;
+  baseAmount: number;
   percentage: number;
 }
 
@@ -27,6 +27,8 @@ export interface Expense {
   date: string;
   amount: number;
   currencyCode: string;
+  baseAmount: number;
+  baseCurrencyCode: string;
   description: string;
   paidById: string;
   splits: ExpenseSplit[];
@@ -73,19 +75,20 @@ export interface AppState {
 
 // Default expense categories
 export const DEFAULT_EXPENSE_CATEGORIES: ExpenseCategory[] = [
-  { id: "transportation", name: "Transportation", icon: "🚌", color: "#FF8C00" },
-  { id: "restaurants", name: "Restaurants", icon: "🍴", color: "#00CED1" },
-  { id: "accommodation", name: "Accommodation", icon: "🛏️", color: "#FF6347" },
-  { id: "groceries", name: "Groceries", icon: "🛒", color: "#1E90FF" },
-  { id: "shopping", name: "Shopping", icon: "🛍️", color: "#32CD32" },
-  { id: "activities", name: "Activities", icon: "🏃", color: "#FF1493" },
-  { id: "drinks", name: "Drinks", icon: "🍸", color: "#9370DB" },
-  { id: "coffee", name: "Coffee", icon: "☕", color: "#8B4513" },
-  { id: "flights", name: "Flights", icon: "✈️", color: "#4169E1" },
-  { id: "general", name: "General", icon: "💬", color: "#FFA500" },
-  { id: "fees", name: "Fees & Charges", icon: "💲", color: "#9932CC" },
-  { id: "sightseeing", name: "Sightseeing", icon: "🏛️", color: "#3CB371" },
-  { id: "entertainment", name: "Entertainment", icon: "🎬", color: "#FF4500" },
-  { id: "laundry", name: "Laundry", icon: "🧺", color: "#20B2AA" },
-  { id: "exchange", name: "Exchange Fees", icon: "💱", color: "#6A5ACD" },
+  { id: "transportation", name: "Transportation", color: "#FF8C00" },
+  { id: "restaurants", name: "Restaurants", color: "#00CED1" },
+  { id: "accommodation", name: "Accommodation", color: "#FF6347" },
+  { id: "groceries", name: "Groceries", color: "#1E90FF" },
+  { id: "shopping", name: "Shopping", color: "#32CD32" },
+  { id: "activities", name: "Activities", color: "#FF1493" },
+  { id: "drinks", name: "Drinks", color: "#9370DB" },
+  { id: "coffee", name: "Coffee", color: "#8B4513" },
+  { id: "flights", name: "Flights", color: "#4169E1" },
+  { id: "general", name: "General", color: "#FFA500" },
+  { id: "fees", name: "Fees & Charges", color: "#9932CC" },
+  { id: "sightseeing", name: "Sightseeing", color: "#3CB371" },
+  { id: "entertainment", name: "Entertainment", color: "#FF4500" },
+  { id: "laundry", name: "Laundry", color: "#20B2AA" },
+  { id: "exchange", name: "Exchange Fees", color: "#6A5ACD" },
+  { id: "other", name: "Other", color: "#708090" },
 ];
