@@ -30,7 +30,6 @@ export interface Expense {
   paidById: string;
   categoryId: string;
   splits: ExpenseSplit[];
-  createdById: string;
   createdAt: string;
 }
 
@@ -42,24 +41,13 @@ export interface PaymentRecord {
   currencyCode: string;
   date: string;
   description: string;
-  createdById: string;
   createdAt: string;
 }
 
-export interface User {
-  id: string;
-  email: string;
-  name: string;
-  avatarUrl?: string;
-}
-
-export interface UserProfile {
-  id: string;
-  userId: string;
-  name: string;
-  avatarUrl?: string;
-  createdAt: string;
-  updatedAt: string;
+export enum MemberStatus {
+  ACTIVE = "ACTIVE",
+  PENDING = "PENDING",
+  DECLINED = "DECLINED",
 }
 
 export interface Tour {
@@ -72,14 +60,11 @@ export interface Tour {
   payments: PaymentRecord[];
   createdAt: string;
   updatedAt: string;
-  createdById: string;
-  members: string[];
 }
 
 export interface AppState {
   tours: Tour[];
   activeTourId: string | null;
-  currentUser: User | null;
   expenseCategories: ExpenseCategory[];
 }
 

@@ -1,10 +1,3 @@
-export interface User {
-  id: string;
-  email: string;
-  name: string;
-  avatarUrl?: string;
-}
-
 export interface Traveler {
   id: string;
   name: string;
@@ -38,7 +31,6 @@ export interface Expense {
   paidById: string;
   splits: ExpenseSplit[];
   categoryId: string;
-  createdById: string; // ID of the user who created the expense
   createdAt: string;
 }
 
@@ -58,7 +50,6 @@ export interface PaymentRecord {
   date: string;
   method: string;
   notes?: string;
-  createdById: string; // ID of the user who created the payment
   createdAt: string;
 }
 
@@ -72,14 +63,11 @@ export interface Tour {
   payments: PaymentRecord[];
   createdAt: string;
   updatedAt: string;
-  createdById: string; // ID of the user who created the tour
-  members: string[]; // Array of user IDs who have access to this tour
 }
 
 export interface AppState {
   tours: Tour[];
   activeTourId: string | null;
-  currentUser: User | null;
   expenseCategories: ExpenseCategory[];
 }
 
