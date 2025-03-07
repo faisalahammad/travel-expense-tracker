@@ -15,42 +15,42 @@ import Travelers from "./pages/Travelers";
 const theme = createTheme({
   palette: {
     primary: {
-      main: "#1976d2", // Blue
-      light: "#4791db",
-      dark: "#115293",
+      main: "#0D9488", // Teal - representing oceans and tropical waters
+      light: "#5EEAD4",
+      dark: "#0F766E",
     },
     secondary: {
-      main: "#e91e63", // Pink
-      light: "#ed4b82",
-      dark: "#a31545",
+      main: "#F59E0B", // Amber - representing sun and beaches
+      light: "#FCD34D",
+      dark: "#D97706",
     },
     error: {
-      main: "#f44336", // Red
-      light: "#e57373",
-      dark: "#d32f2f",
+      main: "#EF4444", // Red
+      light: "#FCA5A5",
+      dark: "#B91C1C",
     },
     warning: {
-      main: "#ff9800", // Orange
-      light: "#ffb74d",
-      dark: "#f57c00",
+      main: "#F97316", // Orange - representing sunsets
+      light: "#FDBA74",
+      dark: "#C2410C",
     },
     info: {
-      main: "#2196f3", // Light Blue
-      light: "#64b5f6",
-      dark: "#1976d2",
+      main: "#3B82F6", // Blue - representing clear skies
+      light: "#93C5FD",
+      dark: "#1D4ED8",
     },
     success: {
-      main: "#4caf50", // Green
-      light: "#81c784",
-      dark: "#388e3c",
+      main: "#10B981", // Green - representing forests and nature
+      light: "#6EE7B7",
+      dark: "#047857",
     },
     background: {
-      default: "#f5f5f5",
-      paper: "#ffffff",
+      default: "#F8FAFC", // Light blue-gray - airy and open feeling
+      paper: "#FFFFFF",
     },
   },
   typography: {
-    fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif',
+    fontFamily: '"Poppins", "Roboto", "Helvetica", "Arial", sans-serif',
     h4: {
       fontWeight: 600,
     },

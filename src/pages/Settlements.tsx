@@ -258,6 +258,7 @@ const Settlements: React.FC = () => {
         amount: parseFloat(paymentAmount),
         currencyCode: paymentCurrency,
         date: paymentDate,
+        description: paymentNotes || "Payment",
       });
 
       // Close dialog
@@ -366,6 +367,24 @@ const Settlements: React.FC = () => {
                 />
                 <Typography variant="body1">{activeTour.expenses.length + (activeTour.payments ? activeTour.payments.length : 0)}</Typography>
               </ListItem>
+              <ListItem sx={{ py: 1 }}>
+                <ListItemText
+                  primary={
+                    <Box sx={{ display: "flex", alignItems: "center" }}>
+                      <BalanceIcon sx={{ mr: 1, color: "primary.main" }} fontSize="small" />
+                      <Typography variant="body1" color="text.secondary">
+                        Total Spent
+                      </Typography>
+                    </Box>
+                  }
+                />
+                <Typography variant="body1" fontWeight="bold">
+                  {formatCurrency(
+                    expensesByCategory.reduce((sum, category) => sum + category.value, 0),
+                    activeTour.baseCurrencyCode
+                  )}
+                </Typography>
+              </ListItem>
             </List>
 
             <Box sx={{ mt: 3 }}>
@@ -387,13 +406,21 @@ const Settlements: React.FC = () => {
               <Box sx={{ height: 300, width: "100%" }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                    <Pie data={expensesByCategory} cx="50%" cy="50%" labelLine={false} outerRadius={80} fill="#8884d8" dataKey="value" nameKey="name" label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}>
+                    <Pie data={expensesByCategory} cx="50%" cy="50%" labelLine={false} outerRadius={80} fill="#8884d8" dataKey="value" nameKey="name" label={false}>
                       {expensesByCategory.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={entry.color} />
                       ))}
                     </Pie>
                     <Legend />
-                    <RechartsTooltip formatter={(value: number) => [`${formatCurrency(value, activeTour.baseCurrencyCode)}`, "Amount"]} />
+                    <RechartsTooltip
+                      formatter={(value: number, name: string, props: any) => {
+                        // Calculate the percentage manually to avoid NaN
+                        const total = expensesByCategory.reduce((sum, item) => sum + item.value, 0);
+                        const percent = total > 0 ? ((value / total) * 100).toFixed(0) : "0";
+                        return [`${formatCurrency(value, activeTour.baseCurrencyCode)} (${percent}%)`, name];
+                      }}
+                      contentStyle={{ backgroundColor: "rgba(255, 255, 255, 0.9)", borderRadius: "4px", padding: "10px", boxShadow: "0 2px 5px rgba(0,0,0,0.15)" }}
+                    />
                   </PieChart>
                 </ResponsiveContainer>
               </Box>

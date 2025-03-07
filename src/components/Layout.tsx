@@ -42,7 +42,17 @@ const Layout: React.FC = () => {
 
   const drawer = (
     <Box onClick={handleDrawerToggle} sx={{ textAlign: "center" }}>
-      <Typography variant="h6" sx={{ my: 2 }}>
+      <Typography
+        variant="h6"
+        component={Link}
+        to="/"
+        sx={{
+          my: 2,
+          display: "block",
+          textDecoration: "none",
+          color: "inherit",
+        }}
+      >
         Travel Expense Tracker
       </Typography>
       <Divider />
@@ -73,14 +83,26 @@ const Layout: React.FC = () => {
   );
 
   return (
-    <Box sx={{ display: "flex" }}>
+    <Box sx={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
       <CssBaseline />
       <AppBar component="nav" position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }}>
         <Toolbar>
           <IconButton color="inherit" aria-label="open drawer" edge="start" onClick={handleDrawerToggle} sx={{ mr: 2, display: { md: "none" } }}>
             <MenuIcon />
           </IconButton>
-          <Typography variant="h6" component="div" sx={{ flexGrow: 1, display: { xs: "none", sm: "block" } }}>
+          <Typography
+            variant="h6"
+            component={Link}
+            to="/"
+            sx={{
+              flexGrow: 1,
+              display: { xs: "none", sm: "block" },
+              textDecoration: "none",
+              color: "inherit",
+              fontWeight: 600,
+              letterSpacing: "0.5px",
+            }}
+          >
             Travel Expense Tracker
           </Typography>
 
@@ -161,6 +183,30 @@ const Layout: React.FC = () => {
       >
         <Container maxWidth="lg" sx={{ py: 4 }}>
           <Outlet />
+        </Container>
+      </Box>
+
+      {/* Footer */}
+      <Box
+        component="footer"
+        sx={{
+          py: 3,
+          px: 2,
+          mt: "auto",
+          backgroundColor: (theme) => theme.palette.primary.main,
+          color: "white",
+        }}
+      >
+        <Container maxWidth="lg">
+          <Typography variant="body2" align="center">
+            © {new Date().getFullYear()} Travel Expense Tracker | Built with ❤️ by{" "}
+            <a href="https://faisalahammad.com" target="_blank" rel="noopener noreferrer">
+              Faisal
+            </a>
+          </Typography>
+          <Typography variant="body2" align="center" sx={{ mt: 1, opacity: 0.8 }}>
+            Simplify group travel finances with easy expense tracking and automatic currency conversion
+          </Typography>
         </Container>
       </Box>
     </Box>
