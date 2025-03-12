@@ -330,8 +330,8 @@ const Expenses: React.FC = () => {
         <Box>
           {sortedDates.map((dateKey) => (
             <Box key={dateKey} sx={{ mb: 4 }}>
-              <Paper sx={{ p: 2, mb: 1, bgcolor: "primary.light" }}>
-                <Typography variant="h6" color="white">
+              <Paper sx={{ p: 2, mb: 1, bgcolor: "#f0f7ff", boxShadow: "0 2px 4px rgba(0,0,0,0.05)" }}>
+                <Typography variant="h6" color="text.primary">
                   {new Date(dateKey).toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
                 </Typography>
               </Paper>

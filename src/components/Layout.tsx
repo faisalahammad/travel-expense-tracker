@@ -103,7 +103,7 @@ const Layout: React.FC = () => {
   return (
     <Box sx={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
       <CssBaseline />
-      <AppBar component="nav" position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }}>
+      <AppBar component="nav" position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1, borderRadius: 0 }}>
         <Toolbar>
           <IconButton color="inherit" aria-label="open drawer" edge="start" onClick={handleDrawerToggle} sx={{ mr: 2, display: { md: "none" } }}>
             <MenuIcon />
@@ -125,7 +125,7 @@ const Layout: React.FC = () => {
           </Typography>
 
           {tours.length > 0 && (
-            <FormControl sx={{ minWidth: 200, mr: 2, backgroundColor: "rgba(255, 255, 255, 0.15)", borderRadius: 1 }}>
+            <FormControl sx={{ minWidth: 200, mr: 2, backgroundColor: "rgba(255, 255, 255, 0.15)", borderRadius: 0 }}>
               <Select
                 value={activeTourId || ""}
                 onChange={handleTourChange}

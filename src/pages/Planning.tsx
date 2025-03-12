@@ -93,6 +93,20 @@ const Planning: React.FC = () => {
       }
       grouped[task.date].push(task);
     });
+
+    // Sort tasks within each date group - incomplete tasks first
+    Object.keys(grouped).forEach((date) => {
+      grouped[date].sort((a, b) => {
+        // First sort by completion status
+        if (a.completed !== b.completed) {
+          return a.completed ? 1 : -1; // Incomplete tasks first
+        }
+        // Then by priority (high to low)
+        const priorityOrder = { HIGH: 0, MEDIUM: 1, LOW: 2 };
+        return priorityOrder[a.priority] - priorityOrder[b.priority];
+      });
+    });
+
     return grouped;
   }, [filteredTasks]);
 
@@ -246,16 +260,17 @@ const Planning: React.FC = () => {
           <Grid item xs={12} md={4}>
             <Autocomplete
               multiple
-              options={activeTour.travelers}
+              options={activeTour?.travelers || []}
               getOptionLabel={(option) => option.name}
-              value={activeTour.travelers.filter((t) => selectedTravelers.includes(t.id))}
-              onChange={(_, newValue) => setSelectedTravelers(newValue.map((t) => t.id))}
+              value={(activeTour?.travelers || []).filter((traveler) => selectedTravelers.includes(traveler.id))}
+              onChange={(_, newValue) => {
+                setSelectedTravelers(newValue.map((traveler) => traveler.id));
+              }}
               renderInput={(params) => <TextField {...params} label="Filter by travelers" />}
               renderTags={(value, getTagProps) =>
                 value.map((option, index) => {
-                  const tagProps = getTagProps({ index });
-                  const { key, ...otherProps } = tagProps;
-                  return <Chip key={key} variant="outlined" label={option.name} {...otherProps} />;
+                  const { key, ...otherProps } = getTagProps({ index });
+                  return <Chip variant="outlined" label={option.name} size="small" key={key} {...otherProps} />;
                 })
               }
             />
@@ -266,13 +281,23 @@ const Planning: React.FC = () => {
       {/* Tasks List */}
       {Object.entries(tasksByDate).map(([date, tasks]) => (
         <Box key={date} sx={{ mb: 4 }}>
-          <Typography variant="h6" gutterBottom>
-            {formatDate(date)}
-          </Typography>
+          <Paper sx={{ p: 2, mb: 1, bgcolor: "#f0f7ff", boxShadow: "0 2px 4px rgba(0,0,0,0.05)" }}>
+            <Typography variant="h6" color="text.primary">
+              {formatDate(date)}
+            </Typography>
+          </Paper>
           <Grid container spacing={2}>
             {tasks.map((task) => (
               <Grid item xs={12} key={task.id}>
-                <Card>
+                <Card
+                  sx={{
+                    opacity: task.completed ? 0.8 : 1,
+                    bgcolor: task.completed ? "#f5f5f5" : "background.paper",
+                    transition: "all 0.2s ease",
+                    borderLeft: 4,
+                    borderColor: task.completed ? "grey.400" : task.priority === TaskPriority.HIGH ? "error.main" : task.priority === TaskPriority.MEDIUM ? "warning.main" : "success.main",
+                  }}
+                >
                   <CardContent>
                     <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                       <Box sx={{ display: "flex", alignItems: "center", gap: 1, width: "100%" }}>
@@ -295,9 +320,9 @@ const Planning: React.FC = () => {
 
                             {task.location && <Chip size="small" icon={<LocationIcon />} label={task.location} variant="outlined" />}
 
-                            <Chip size="small" icon={<FlagIcon />} label={task.priority.toLowerCase()} color={getPriorityColor(task.priority)} />
+                            <Chip size="small" icon={<FlagIcon />} label={task.priority.toLowerCase()} color={task.completed ? "default" : getPriorityColor(task.priority)} />
 
-                            {task.assignedTo.length > 0 && <Box sx={{ display: "flex", gap: 0.5 }}>{renderTravelerChips(task.assignedTo, <PersonIcon />, "primary")}</Box>}
+                            {task.assignedTo.length > 0 && <Box sx={{ display: "flex", gap: 0.5 }}>{renderTravelerChips(task.assignedTo, <PersonIcon />, task.completed ? undefined : "primary")}</Box>}
                           </Box>
                         </Box>
                       </Box>
