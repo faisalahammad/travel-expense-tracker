@@ -223,9 +223,6 @@ const Layout: React.FC = () => {
               Faisal
             </a>
           </Typography>
-          <Typography variant="body2" align="center" sx={{ mt: 1, opacity: 0.8 }}>
-            Simplify group travel finances with easy expense tracking and automatic currency conversion
-          </Typography>
         </Container>
       </Box>
 
