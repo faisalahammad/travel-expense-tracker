@@ -6,7 +6,7 @@ import "./index.css";
 import Currencies from "./pages/Currencies";
 import Expenses from "./pages/Expenses";
 import Home from "./pages/Home";
-import Settings from "./pages/Settings";
+import Planning from "./pages/Planning";
 import Settlements from "./pages/Settlements";
 import Tours from "./pages/Tours";
 import Travelers from "./pages/Travelers";
@@ -100,7 +100,7 @@ const AppRoutes: React.FC = () => {
           <Route path="currencies" element={<Currencies />} />
           <Route path="expenses" element={<Expenses />} />
           <Route path="settlements" element={<Settlements />} />
-          <Route path="settings" element={<Settings />} />
+          <Route path="planning" element={<Planning />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

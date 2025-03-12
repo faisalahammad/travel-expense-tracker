@@ -1,10 +1,9 @@
-import { Add as AddIcon, Check as CheckIcon, Close as CloseIcon, Delete as DeleteIcon, Edit as EditIcon, CheckCircle as SelectIcon, Share as ShareIcon } from "@mui/icons-material";
-import { Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Divider, Grid, IconButton, Paper, Snackbar, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography } from "@mui/material";
+import { Add as AddIcon, Check as CheckIcon, Close as CloseIcon, Delete as DeleteIcon, Edit as EditIcon, CheckCircle as SelectIcon } from "@mui/icons-material";
+import { Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Divider, Grid, IconButton, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography } from "@mui/material";
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { v4 as uuidv4 } from "uuid";
 import { useAppContext } from "../context/AppContext";
-import { generateShareableLink } from "../utils";
 
 const Tours: React.FC = () => {
   const { state, createTour, updateTour, deleteTour, setActiveTour } = useAppContext();
@@ -17,8 +16,6 @@ const Tours: React.FC = () => {
   const [editTourName, setEditTourName] = useState("");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [tourToDelete, setTourToDelete] = useState<string | null>(null);
-  const [snackbarOpen, setSnackbarOpen] = useState(false);
-  const [shareLink, setShareLink] = useState("");
 
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -100,19 +97,6 @@ const Tours: React.FC = () => {
   const handleSelectTour = (tourId: string) => {
     setActiveTour(tourId);
     navigate("/");
-  };
-
-  const handleCopyShareableLink = (tourId: string) => {
-    const tour = tours.find((t) => t.id === tourId);
-    if (!tour) return;
-
-    const link = generateShareableLink(tour);
-    navigator.clipboard.writeText(link);
-    setSnackbarOpen(true);
-  };
-
-  const handleCloseSnackbar = () => {
-    setSnackbarOpen(false);
   };
 
   return (
@@ -210,9 +194,6 @@ const Tours: React.FC = () => {
                           <IconButton color="error" onClick={() => handleOpenDeleteDialog(tour.id)} size="small" title="Delete Tour">
                             <DeleteIcon />
                           </IconButton>
-                          <IconButton color="secondary" onClick={() => handleCopyShareableLink(tour.id)} size="small" title="Share Tour">
-                            <ShareIcon />
-                          </IconButton>
                         </Box>
                       )}
                     </TableCell>
@@ -239,9 +220,6 @@ const Tours: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
-
-      {/* Snackbar for copy link notification */}
-      <Snackbar open={snackbarOpen} autoHideDuration={3000} onClose={handleCloseSnackbar} message="Shareable link copied to clipboard!" />
     </>
   );
 };

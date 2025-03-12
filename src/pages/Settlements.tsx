@@ -32,14 +32,34 @@ import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Cell, Legend, Pie, PieChart, Tooltip as RechartsTooltip, ResponsiveContainer } from "recharts";
 import { useAppContext } from "../context/AppContext";
-import { convertCurrency, formatCurrency, getTravelerName } from "../utils";
+import { useActiveTour } from "../hooks/useActiveTour";
+import { Currency, Expense, ExpenseSplit, Tour, Traveler } from "../types";
+import { formatCurrency } from "../utils";
 import { exportTourToExcel } from "../utils/excelExport";
 import { calculateSettlements } from "../utils/settlementCalculator";
+
+interface TravelerTotal {
+  traveler: Traveler;
+  totalPaid: number;
+  totalOwed: number;
+  paymentsMade: number;
+  paymentsReceived: number;
+  netExpenseBalance: number;
+  netPaymentBalance: number;
+  finalBalance: number;
+}
+
+interface CategoryTotal {
+  categoryId: string;
+  total: number;
+  color: string;
+}
 
 const Settlements: React.FC = () => {
   const { state, addPayment, removePayment } = useAppContext();
   const { tours, activeTourId, expenseCategories } = state;
   const navigate = useNavigate();
+  const { activeTour } = useActiveTour();
 
   // Payment dialog state
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
@@ -58,13 +78,11 @@ const Settlements: React.FC = () => {
     }
   }, [activeTourId, navigate]);
 
-  const activeTour = tours.find((tour) => tour.id === activeTourId);
-
   if (!activeTour) {
     return (
-      <Alert severity="warning" sx={{ mt: 2 }}>
-        No active tour selected. Please select or create a tour first.
-      </Alert>
+      <Box>
+        <Typography>Please select a tour first.</Typography>
+      </Box>
     );
   }
 
@@ -72,158 +90,94 @@ const Settlements: React.FC = () => {
 
   // Calculate expense totals by category
   const calculateExpensesByCategory = () => {
-    const categoryTotals: Record<string, number> = {};
-
-    // Initialize all categories with 0
-    expenseCategories.forEach((category) => {
-      categoryTotals[category.id] = 0;
-    });
-
-    // Sum up expenses by category
-    activeTour.expenses.forEach((expense) => {
-      const amount = expense.currencyCode !== activeTour.baseCurrencyCode ? convertCurrency(expense.amount, expense.currencyCode, activeTour.baseCurrencyCode, activeTour.currencies) : expense.amount;
-
-      if (categoryTotals[expense.categoryId] !== undefined) {
-        categoryTotals[expense.categoryId] += amount;
-      } else {
-        categoryTotals[expense.categoryId] = amount;
+    const categoryTotals = activeTour.expenses.reduce((acc: Record<string, number>, expense: Expense) => {
+      const category = expense.categoryId || "uncategorized";
+      if (!acc[category]) {
+        acc[category] = 0;
       }
-    });
+      const baseAmount = expense.amount * (expense.currencyCode === activeTour.baseCurrencyCode ? 1 : activeTour.currencies.find((c: Currency) => c.code === expense.currencyCode)?.exchangeRate || 1);
+      acc[category] += baseAmount;
+      return acc;
+    }, {});
 
-    // Convert to array format for the chart
-    return Object.entries(categoryTotals)
-      .map(([categoryId, amount]) => {
-        const category = expenseCategories.find((c) => c.id === categoryId);
-        return {
-          name: category ? category.name : "Unknown",
-          value: Math.round(amount * 100) / 100,
-          color: category ? category.color : "#ccc",
-        };
-      })
-      .filter((item) => item.value > 0)
-      .sort((a, b) => b.value - a.value);
+    return Object.entries(categoryTotals).map(([categoryId, total]): CategoryTotal => {
+      const category = expenseCategories.find((c) => c.id === categoryId);
+      return {
+        categoryId,
+        total: Math.round(total * 100) / 100,
+        color: category?.color || "#ccc",
+      };
+    });
   };
 
   const expensesByCategory = calculateExpensesByCategory();
 
-  // Calculate expense totals for each traveler
-  const calculateTravelerExpenseTotals = (travelerId: string) => {
-    // Total paid by this traveler
-    const totalPaid = activeTour.expenses
-      .filter((expense: any) => expense.paidById === travelerId)
-      .reduce((sum: number, expense: any) => {
-        // Get the base amount (amount in base currency)
-        let expenseAmount = 0;
+  // Calculate traveler expense totals
+  const calculateTravelerExpenseTotals = (tour: Tour): TravelerTotal[] => {
+    const totals = tour.travelers.map((traveler: Traveler) => {
+      // Total amount paid by this traveler
+      const totalPaid = tour.expenses
+        .filter((expense: Expense) => expense.paidById === traveler.id)
+        .reduce((sum: number, expense: Expense) => {
+          const baseAmount = expense.amount * (expense.currencyCode === tour.baseCurrencyCode ? 1 : tour.currencies.find((c: Currency) => c.code === expense.currencyCode)?.exchangeRate || 1);
+          return sum + baseAmount;
+        }, 0);
 
-        // Use the pre-calculated baseAmount if available
-        if (expense.baseAmount !== undefined) {
-          expenseAmount = expense.baseAmount;
-        } else {
-          // Otherwise calculate using the exchange rate
-          if (expense.currencyCode !== activeTour.baseCurrencyCode) {
-            const currency = activeTour.currencies.find((c: any) => c.code === expense.currencyCode);
-            if (currency) {
-              // If 1 USD = 124.64 BDT, then 1200 USD should be 1200 * 124.64 = 149,568 BDT
-              expenseAmount = expense.amount * currency.exchangeRate;
-            } else {
-              expenseAmount = expense.amount;
-            }
-          } else {
-            expenseAmount = expense.amount;
-          }
-        }
+      // Total amount owed by this traveler (from expense splits)
+      const totalOwed = tour.expenses.reduce((sum: number, expense: Expense) => {
+        const split = expense.splits.find((s: ExpenseSplit) => s.travelerId === traveler.id);
+        if (!split) return sum;
 
-        return sum + expenseAmount;
+        const splitBaseAmount = split.amount * (expense.currencyCode === tour.baseCurrencyCode ? 1 : tour.currencies.find((c: Currency) => c.code === expense.currencyCode)?.exchangeRate || 1);
+
+        return sum + splitBaseAmount;
       }, 0);
 
-    // Total owed by this traveler
-    const totalOwed = activeTour.expenses.reduce((sum: number, expense: any) => {
-      const split = expense.splits.find((s: any) => s.travelerId === travelerId);
-      if (!split) return sum;
+      // Payments made by this traveler
+      const paymentsMade = tour.payments
+        ? tour.payments
+            .filter((payment) => payment.fromTravelerId === traveler.id)
+            .reduce((sum, payment) => {
+              const paymentBaseAmount = payment.currencyCode === tour.baseCurrencyCode ? payment.amount : payment.amount * (tour.currencies.find((c: Currency) => c.code === payment.currencyCode)?.exchangeRate || 1);
+              return sum + paymentBaseAmount;
+            }, 0)
+        : 0;
 
-      // Get the base amount for the split
-      let splitAmount = 0;
+      // Payments received by this traveler
+      const paymentsReceived = tour.payments
+        ? tour.payments
+            .filter((payment) => payment.toTravelerId === traveler.id)
+            .reduce((sum, payment) => {
+              const paymentBaseAmount = payment.currencyCode === tour.baseCurrencyCode ? payment.amount : payment.amount * (tour.currencies.find((c: Currency) => c.code === payment.currencyCode)?.exchangeRate || 1);
+              return sum + paymentBaseAmount;
+            }, 0)
+        : 0;
 
-      // Use the pre-calculated baseAmount if available
-      if (split.baseAmount !== undefined) {
-        splitAmount = split.baseAmount;
-      } else {
-        // If expense has baseAmount, calculate proportionally
-        if (expense.baseAmount !== undefined) {
-          splitAmount = split.amount * (expense.baseAmount / expense.amount);
-        } else {
-          // Otherwise calculate using the exchange rate
-          if (expense.currencyCode !== activeTour.baseCurrencyCode) {
-            const currency = activeTour.currencies.find((c: any) => c.code === expense.currencyCode);
-            if (currency) {
-              splitAmount = split.amount * currency.exchangeRate;
-            } else {
-              splitAmount = split.amount;
-            }
-          } else {
-            splitAmount = split.amount;
-          }
-        }
-      }
+      // Calculate net expense balance (paid - owed)
+      const netExpenseBalance = totalPaid - totalOwed;
 
-      return sum + splitAmount;
-    }, 0);
+      // Calculate net payment balance (received - made)
+      const netPaymentBalance = paymentsReceived - paymentsMade;
 
-    // Calculate payments made by this traveler
-    const paymentsMade = activeTour.payments
-      ? activeTour.payments
-          .filter((payment: any) => payment.fromTravelerId === travelerId)
-          .reduce((sum: number, payment: any) => {
-            // Convert to base currency if needed
-            let paymentAmount = payment.amount;
-            if (payment.currencyCode !== activeTour.baseCurrencyCode) {
-              const currency = activeTour.currencies.find((c: any) => c.code === payment.currencyCode);
-              if (currency) {
-                // If 1 USD = 124.64 BDT, then 1200 USD should be 1200 * 124.64 = 149,568 BDT
-                paymentAmount = payment.amount * currency.exchangeRate;
-              }
-            }
-            return sum + paymentAmount;
-          }, 0)
-      : 0;
+      // Final balance
+      const finalBalance = netExpenseBalance + netPaymentBalance;
 
-    // Calculate payments received by this traveler
-    const paymentsReceived = activeTour.payments
-      ? activeTour.payments
-          .filter((payment: any) => payment.toTravelerId === travelerId)
-          .reduce((sum: number, payment: any) => {
-            // Convert to base currency if needed
-            let paymentAmount = payment.amount;
-            if (payment.currencyCode !== activeTour.baseCurrencyCode) {
-              const currency = activeTour.currencies.find((c: any) => c.code === payment.currencyCode);
-              if (currency) {
-                // If 1 USD = 124.64 BDT, then 1200 USD should be 1200 * 124.64 = 149,568 BDT
-                paymentAmount = payment.amount * currency.exchangeRate;
-              }
-            }
-            return sum + paymentAmount;
-          }, 0)
-      : 0;
+      return {
+        traveler,
+        totalPaid: Math.round(totalPaid * 100) / 100,
+        totalOwed: Math.round(totalOwed * 100) / 100,
+        paymentsMade: Math.round(paymentsMade * 100) / 100,
+        paymentsReceived: Math.round(paymentsReceived * 100) / 100,
+        netExpenseBalance: Math.round(netExpenseBalance * 100) / 100,
+        netPaymentBalance: Math.round(netPaymentBalance * 100) / 100,
+        finalBalance: Math.round(finalBalance * 100) / 100,
+      };
+    });
 
-    // Calculate net expense balance (what they paid minus what they owed)
-    const netExpenseBalance = totalPaid - totalOwed;
-
-    // Calculate net payment balance (what they received minus what they paid)
-    const netPaymentBalance = paymentsReceived - paymentsMade;
-
-    // Calculate final balance (net expense balance plus net payment balance)
-    const finalBalance = netExpenseBalance + netPaymentBalance;
-
-    return {
-      totalPaid: Math.round(totalPaid * 100) / 100,
-      totalOwed: Math.round(totalOwed * 100) / 100,
-      paymentsMade: Math.round(paymentsMade * 100) / 100,
-      paymentsReceived: Math.round(paymentsReceived * 100) / 100,
-      netExpenseBalance: Math.round(netExpenseBalance * 100) / 100,
-      netPaymentBalance: Math.round(netPaymentBalance * 100) / 100,
-      finalBalance: Math.round(finalBalance * 100) / 100,
-    };
+    return totals;
   };
+
+  const travelerTotals = calculateTravelerExpenseTotals(activeTour);
 
   const handleExportToExcel = () => {
     exportTourToExcel(activeTour);
@@ -283,13 +237,14 @@ const Settlements: React.FC = () => {
   };
 
   return (
-    <>
+    <Box>
       <Typography variant="h4" component="h1" gutterBottom>
         Settlements
       </Typography>
-      <Typography variant="h6" component="h2" gutterBottom color="text.secondary">
+      <Typography variant="subtitle1" color="text.secondary" gutterBottom>
         Tour: {activeTour.name}
       </Typography>
+
       <Alert severity="info" sx={{ mb: 3 }}>
         All amounts shown are in base currency ({activeTour.baseCurrencyCode}). Expenses in other currencies have been converted using the defined exchange rates.
       </Alert>
@@ -380,7 +335,7 @@ const Settlements: React.FC = () => {
                 />
                 <Typography variant="body1" fontWeight="bold">
                   {formatCurrency(
-                    expensesByCategory.reduce((sum, category) => sum + category.value, 0),
+                    expensesByCategory.reduce((sum, category) => sum + category.total, 0),
                     activeTour.baseCurrencyCode
                   )}
                 </Typography>
@@ -406,7 +361,7 @@ const Settlements: React.FC = () => {
               <Box sx={{ height: 300, width: "100%" }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                    <Pie data={expensesByCategory} cx="50%" cy="50%" labelLine={false} outerRadius={80} fill="#8884d8" dataKey="value" nameKey="name" label={false}>
+                    <Pie data={expensesByCategory} cx="50%" cy="50%" labelLine={false} outerRadius={80} fill="#8884d8" dataKey="total" nameKey="categoryId" label={false}>
                       {expensesByCategory.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={entry.color} />
                       ))}
@@ -415,7 +370,7 @@ const Settlements: React.FC = () => {
                     <RechartsTooltip
                       formatter={(value: number, name: string, props: any) => {
                         // Calculate the percentage manually to avoid NaN
-                        const total = expensesByCategory.reduce((sum, item) => sum + item.value, 0);
+                        const total = expensesByCategory.reduce((sum, item) => sum + item.total, 0);
                         const percent = total > 0 ? ((value / total) * 100).toFixed(0) : "0";
                         return [`${formatCurrency(value, activeTour.baseCurrencyCode)} (${percent}%)`, name];
                       }}
@@ -434,43 +389,63 @@ const Settlements: React.FC = () => {
       </Grid>
 
       <Paper elevation={2} sx={{ p: 3, mb: 4 }}>
-        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
-          <Typography variant="h5" component="h3">
-            Expense Totals by Traveler
-          </Typography>
-        </Box>
+        <Typography variant="h5" component="h2" gutterBottom>
+          Expense Totals by Traveler
+        </Typography>
         <Divider sx={{ mb: 3 }} />
 
-        <Grid container spacing={2}>
-          {activeTour.travelers.map((traveler) => {
-            const totals = calculateTravelerExpenseTotals(traveler.id);
-            const isPositive = totals.finalBalance > 0;
-            const isNeutral = Math.abs(totals.finalBalance) < 0.01;
+        <Grid container spacing={3}>
+          {travelerTotals.map((item) => (
+            <Grid item xs={12} sm={6} md={4} key={item.traveler.id}>
+              <Paper
+                elevation={3}
+                sx={{
+                  p: 3,
+                  bgcolor: "background.paper",
+                  borderLeft: 6,
+                  borderColor: item.finalBalance > 0 ? "success.main" : item.finalBalance < 0 ? "error.main" : "grey.300",
+                }}
+              >
+                <Typography variant="h6" gutterBottom>
+                  {item.traveler.name}
+                </Typography>
 
-            return (
-              <Grid item xs={12} md={4} key={traveler.id}>
-                <Paper
-                  elevation={1}
-                  sx={{
-                    p: 2,
-                    bgcolor: isNeutral ? "success.light" : isPositive ? "success.light" : "error.light",
-                    color: isNeutral ? "success.contrastText" : isPositive ? "success.contrastText" : "error.contrastText",
-                  }}
-                >
-                  <Typography variant="h6" component="h4" gutterBottom>
-                    {traveler.name}
+                <Box sx={{ mb: 2 }}>
+                  <Typography variant="body2" color="text.secondary" gutterBottom>
+                    Total Paid
                   </Typography>
-                  <Typography variant="h5" component="div" align="right" sx={{ mb: 1 }}>
-                    {isPositive ? "" : "-"}
-                    {formatCurrency(Math.abs(totals.finalBalance), activeTour.baseCurrencyCode)}
+                  <Typography variant="h6" color="text.primary">
+                    {formatCurrency(item.totalPaid, activeTour.baseCurrencyCode)}
                   </Typography>
-                  <Typography variant="body2" align="right">
-                    Expenses: {formatCurrency(totals.totalOwed, activeTour.baseCurrencyCode)}, Payments: {formatCurrency(totals.paymentsMade, activeTour.baseCurrencyCode)}
+                </Box>
+
+                <Box sx={{ mb: 2 }}>
+                  <Typography variant="body2" color="text.secondary" gutterBottom>
+                    Total Owed
                   </Typography>
-                </Paper>
-              </Grid>
-            );
-          })}
+                  <Typography variant="h6" color="text.primary">
+                    {formatCurrency(item.totalOwed, activeTour.baseCurrencyCode)}
+                  </Typography>
+                </Box>
+
+                <Divider sx={{ my: 2 }} />
+
+                <Box>
+                  <Typography variant="body2" color="text.secondary" gutterBottom>
+                    Final Balance
+                  </Typography>
+                  <Typography variant="h5" color={item.finalBalance > 0 ? "success.main" : item.finalBalance < 0 ? "error.main" : "text.primary"} sx={{ fontWeight: 600 }}>
+                    {formatCurrency(Math.abs(item.finalBalance), activeTour.baseCurrencyCode)}
+                    {item.finalBalance !== 0 && (
+                      <Typography component="span" variant="body2" color={item.finalBalance > 0 ? "success.main" : "error.main"} sx={{ ml: 1 }}>
+                        ({item.finalBalance > 0 ? "to receive" : "to pay"})
+                      </Typography>
+                    )}
+                  </Typography>
+                </Box>
+              </Paper>
+            </Grid>
+          ))}
         </Grid>
       </Paper>
 
@@ -483,32 +458,68 @@ const Settlements: React.FC = () => {
         {settlements.length === 0 ? (
           <Alert severity="info">No settlements needed. All expenses are balanced.</Alert>
         ) : (
-          <TableContainer>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>From</TableCell>
-                  <TableCell>To</TableCell>
-                  <TableCell>Amount</TableCell>
-                  <TableCell align="right">Actions</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {settlements.map((settlement, index) => (
-                  <TableRow key={index}>
-                    <TableCell>{getTravelerName(settlement.fromTravelerId, activeTour.travelers)}</TableCell>
-                    <TableCell>{getTravelerName(settlement.toTravelerId, activeTour.travelers)}</TableCell>
-                    <TableCell>{formatCurrency(settlement.amount, settlement.currencyCode)}</TableCell>
-                    <TableCell align="right">
-                      <Button variant="outlined" size="small" onClick={() => handleOpenPaymentDialog(settlement.fromTravelerId, settlement.toTravelerId, settlement.amount)}>
-                        Record Payment
-                      </Button>
-                    </TableCell>
+          <>
+            <Alert severity="info" sx={{ mb: 3 }}>
+              This settlement plan is calculated based on the current expense and payment data in the database. It shows the exact amounts each person needs to pay to settle all debts.
+            </Alert>
+            <TableContainer>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>From</TableCell>
+                    <TableCell>To</TableCell>
+                    <TableCell>Amount</TableCell>
+                    <TableCell>Details</TableCell>
+                    <TableCell align="right">Actions</TableCell>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
+                </TableHead>
+                <TableBody>
+                  {settlements.map((settlement, index) => {
+                    const fromTraveler = activeTour.travelers.find((t) => t.id === settlement.fromTravelerId);
+                    const toTraveler = activeTour.travelers.find((t) => t.id === settlement.toTravelerId);
+
+                    // Find the traveler totals for additional info
+                    const fromTravelerTotal = travelerTotals.find((t) => t.traveler.id === settlement.fromTravelerId);
+                    const toTravelerTotal = travelerTotals.find((t) => t.traveler.id === settlement.toTravelerId);
+
+                    return (
+                      <TableRow key={index}>
+                        <TableCell>
+                          <Typography variant="body1">{fromTraveler?.name || "Unknown"}</Typography>
+                          {fromTravelerTotal && (
+                            <Typography variant="caption" color="text.secondary">
+                              Balance: {formatCurrency(fromTravelerTotal.finalBalance, activeTour.baseCurrencyCode)}
+                            </Typography>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body1">{toTraveler?.name || "Unknown"}</Typography>
+                          {toTravelerTotal && (
+                            <Typography variant="caption" color="text.secondary">
+                              Balance: {formatCurrency(toTravelerTotal.finalBalance, activeTour.baseCurrencyCode)}
+                            </Typography>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body1" fontWeight="bold">
+                            {formatCurrency(settlement.amount, settlement.currencyCode)}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="caption">This payment will settle {fromTraveler?.name}'s debt.</Typography>
+                        </TableCell>
+                        <TableCell align="right">
+                          <Button variant="outlined" size="small" onClick={() => handleOpenPaymentDialog(settlement.fromTravelerId, settlement.toTravelerId, settlement.amount)}>
+                            Record Payment
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </>
         )}
       </Paper>
 
@@ -521,7 +532,7 @@ const Settlements: React.FC = () => {
               <FormControl fullWidth>
                 <InputLabel>From</InputLabel>
                 <Select value={fromTravelerId} onChange={(e) => setFromTravelerId(e.target.value)} label="From">
-                  {activeTour.travelers.map((traveler) => (
+                  {activeTour.travelers.map((traveler: Traveler) => (
                     <MenuItem key={traveler.id} value={traveler.id}>
                       {traveler.name}
                     </MenuItem>
@@ -533,7 +544,7 @@ const Settlements: React.FC = () => {
               <FormControl fullWidth>
                 <InputLabel>To</InputLabel>
                 <Select value={toTravelerId} onChange={(e) => setToTravelerId(e.target.value)} label="To">
-                  {activeTour.travelers.map((traveler) => (
+                  {activeTour.travelers.map((traveler: Traveler) => (
                     <MenuItem key={traveler.id} value={traveler.id} disabled={traveler.id === fromTravelerId}>
                       {traveler.name}
                     </MenuItem>
@@ -557,7 +568,7 @@ const Settlements: React.FC = () => {
               <FormControl fullWidth>
                 <InputLabel>Currency</InputLabel>
                 <Select value={paymentCurrency} onChange={(e) => setPaymentCurrency(e.target.value)} label="Currency">
-                  {activeTour.currencies.map((currency) => (
+                  {activeTour.currencies.map((currency: Currency) => (
                     <MenuItem key={currency.code} value={currency.code}>
                       {currency.code} - {currency.name}
                     </MenuItem>
@@ -589,7 +600,7 @@ const Settlements: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
-    </>
+    </Box>
   );
 };
 

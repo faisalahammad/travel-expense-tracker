@@ -1,4 +1,4 @@
-import { CurrencyExchangeOutlined as CurrencyIcon, ExploreOutlined as ExploreIcon, PeopleOutlined as PeopleIcon, ReceiptLongOutlined as ReceiptLongIcon, SwapHorizOutlined as SwapHorizIcon } from "@mui/icons-material";
+import { Assignment as AssignmentIcon, ExploreOutlined as ExploreIcon, ReceiptLongOutlined as ReceiptLongIcon, SwapHorizOutlined as SwapHorizIcon } from "@mui/icons-material";
 import MenuIcon from "@mui/icons-material/Menu";
 import { AppBar, Box, Button, Container, CssBaseline, Divider, Drawer, FormControl, IconButton, List, ListItem, ListItemButton, ListItemIcon, ListItemText, MenuItem, Select, SelectChangeEvent, Toolbar, Typography, useMediaQuery, useTheme } from "@mui/material";
 import React, { useState } from "react";
@@ -29,15 +29,11 @@ const Layout: React.FC = () => {
 
   // Define navigation items
   const navItems = [
-    { name: "Tours", path: "/", icon: <ExploreIcon /> },
-    ...(activeTourId
-      ? [
-          { name: "Travelers", path: "/travelers", icon: <PeopleIcon /> },
-          { name: "Currencies", path: "/currencies", icon: <CurrencyIcon /> },
-          { name: "Expenses", path: "/expenses", icon: <ReceiptLongIcon /> },
-          { name: "Settlements", path: "/settlements", icon: <SwapHorizIcon /> },
-        ]
-      : []),
+    { text: "Home", path: "/", icon: <ExploreIcon /> },
+    { text: "Tours", path: "/tours", icon: <ExploreIcon /> },
+    { text: "Expenses", path: "/expenses", icon: <ReceiptLongIcon /> },
+    { text: "Settlements", path: "/settlements", icon: <SwapHorizIcon /> },
+    { text: "Planning", path: "/planning", icon: <AssignmentIcon /> },
   ];
 
   const drawer = (
@@ -56,9 +52,31 @@ const Layout: React.FC = () => {
         Travel Expense Tracker
       </Typography>
       <Divider />
+
+      {tours.length > 0 && (
+        <Box sx={{ p: 2 }}>
+          <FormControl fullWidth>
+            <Typography variant="subtitle2" sx={{ mb: 1, textAlign: "left" }}>
+              Active Tour
+            </Typography>
+            <Select value={activeTourId || ""} onChange={handleTourChange} displayEmpty variant="outlined" size="small">
+              <MenuItem value="" disabled>
+                Select a Tour
+              </MenuItem>
+              {tours.map((tour) => (
+                <MenuItem key={tour.id} value={tour.id}>
+                  {tour.name}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </Box>
+      )}
+
+      <Divider />
       <List>
         {navItems.map((item) => (
-          <ListItem key={item.name} disablePadding>
+          <ListItem key={item.text} disablePadding>
             <ListItemButton
               component={Link}
               to={item.path}
@@ -74,7 +92,7 @@ const Layout: React.FC = () => {
               }}
             >
               <ListItemIcon>{item.icon}</ListItemIcon>
-              <ListItemText primary={item.name} />
+              <ListItemText primary={item.text} />
             </ListItemButton>
           </ListItem>
         ))}
@@ -134,7 +152,7 @@ const Layout: React.FC = () => {
           <Box sx={{ display: { xs: "none", md: "block" } }}>
             {navItems.map((item) => (
               <Button
-                key={item.name}
+                key={item.text}
                 component={Link}
                 to={item.path}
                 sx={{
@@ -150,7 +168,7 @@ const Layout: React.FC = () => {
                 }}
                 startIcon={item.icon}
               >
-                {item.name}
+                {item.text}
               </Button>
             ))}
           </Box>

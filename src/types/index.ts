@@ -12,6 +12,7 @@ export interface Currency {
 export interface ExpenseCategory {
   id: string;
   name: string;
+  icon?: string;
   color: string;
 }
 
@@ -50,9 +51,30 @@ export interface PaymentRecord {
   amount: number;
   currencyCode: string;
   date: string;
-  method: string;
+  method?: string;
   notes?: string;
+  description?: string;
   createdAt: string;
+}
+
+export enum TaskPriority {
+  LOW = "low",
+  MEDIUM = "medium",
+  HIGH = "high",
+}
+
+export interface PlanningTask {
+  id: string;
+  tourId: string;
+  title: string;
+  cost?: number;
+  currencyCode?: string;
+  location?: string;
+  date: string;
+  priority: TaskPriority;
+  travelers: string[];
+  assignedTo: string[];
+  completed: boolean;
 }
 
 export interface Tour {
@@ -63,6 +85,7 @@ export interface Tour {
   currencies: Currency[];
   expenses: Expense[];
   payments: PaymentRecord[];
+  planningTasks: PlanningTask[];
   createdAt: string;
   updatedAt: string;
 }
@@ -71,24 +94,16 @@ export interface AppState {
   tours: Tour[];
   activeTourId: string | null;
   expenseCategories: ExpenseCategory[];
+  planningTasks: PlanningTask[];
 }
 
 // Default expense categories
 export const DEFAULT_EXPENSE_CATEGORIES: ExpenseCategory[] = [
-  { id: "transportation", name: "Transportation", color: "#FF8C00" },
-  { id: "restaurants", name: "Restaurants", color: "#00CED1" },
-  { id: "accommodation", name: "Accommodation", color: "#FF6347" },
-  { id: "groceries", name: "Groceries", color: "#1E90FF" },
-  { id: "shopping", name: "Shopping", color: "#32CD32" },
-  { id: "activities", name: "Activities", color: "#FF1493" },
-  { id: "drinks", name: "Drinks", color: "#9370DB" },
-  { id: "coffee", name: "Coffee", color: "#8B4513" },
-  { id: "flights", name: "Flights", color: "#4169E1" },
-  { id: "general", name: "General", color: "#FFA500" },
-  { id: "fees", name: "Fees & Charges", color: "#9932CC" },
-  { id: "sightseeing", name: "Sightseeing", color: "#3CB371" },
-  { id: "entertainment", name: "Entertainment", color: "#FF4500" },
-  { id: "laundry", name: "Laundry", color: "#20B2AA" },
-  { id: "exchange", name: "Exchange Fees", color: "#6A5ACD" },
-  { id: "other", name: "Other", color: "#708090" },
+  { id: "food", name: "Food & Drinks", icon: "restaurant", color: "#FF5722" },
+  { id: "accommodation", name: "Accommodation", icon: "hotel", color: "#2196F3" },
+  { id: "transportation", name: "Transportation", icon: "directions_car", color: "#4CAF50" },
+  { id: "activities", name: "Activities", icon: "local_activity", color: "#9C27B0" },
+  { id: "shopping", name: "Shopping", icon: "shopping_bag", color: "#F44336" },
+  { id: "repayment", name: "Repayment", icon: "repayment", color: "#2ecc71" },
+  { id: "other", name: "Other", icon: "more_horiz", color: "#607D8B" },
 ];

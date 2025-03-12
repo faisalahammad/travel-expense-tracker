@@ -113,6 +113,9 @@ const Expenses: React.FC = () => {
       // Add new expense
       addExpense(activeTourId, expenseData);
     }
+
+    // Close the form after saving
+    handleCloseExpenseForm();
   };
 
   // Helper function to get traveler name by ID
