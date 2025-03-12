@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import { AppState, Tour } from "../types";
+import { AppState, PlanningTask, Tour } from "../types/index";
 
 // Extended interfaces for database operations
 interface ExtendedExpense {
@@ -45,14 +45,267 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
 });
 
 // Save app state to Supabase
-export const saveAppState = async (state: AppState): Promise<void> => {
+export const saveAppState = async (state: AppState) => {
   try {
-    // Save each tour individually
+    // First, save the basic tour information
+    const { data: toursData, error: toursError } = await supabase.from("tours").upsert(
+      state.tours.map((tour) => ({
+        id: tour.id,
+        name: tour.name,
+        base_currency_code: tour.baseCurrencyCode,
+        created_at: tour.createdAt,
+        updated_at: tour.updatedAt,
+      }))
+    );
+
+    if (toursError) throw toursError;
+
+    // Save each tour's details separately
     for (const tour of state.tours) {
       await saveTour(tour);
     }
+
+    // Save planning tasks
+    if (state.planningTasks && state.planningTasks.length > 0) {
+      const now = new Date().toISOString();
+
+      for (const task of state.planningTasks) {
+        // Prepare task data
+        const taskData = {
+          id: task.id,
+          tour_id: task.tourId,
+          title: task.title,
+          date: task.date,
+          priority: task.priority,
+          location: task.location || null,
+          cost: task.cost !== undefined ? task.cost : null,
+          currency_code: task.currencyCode || null,
+          travelers: task.travelers || [],
+          assigned_to: task.assignedTo || [],
+          completed: task.completed || false,
+          created_at: now,
+          updated_at: now,
+        };
+
+        console.log("Saving planning task:", taskData);
+
+        // Upsert the task
+        const { error: upsertError } = await supabase.from("planning_tasks").upsert(taskData);
+
+        if (upsertError) {
+          console.error("Error upserting planning task:", upsertError, taskData);
+          throw upsertError;
+        }
+      }
+    }
+
+    return { data: toursData, error: null };
   } catch (error) {
     console.error("Error saving app state:", error);
+    return { data: null, error };
+  }
+};
+
+// Load app state from Supabase
+export const loadAppState = async (initialState: AppState): Promise<AppState> => {
+  try {
+    console.log("Loading app state from Supabase...");
+
+    // Load tours
+    const { data: toursData, error: toursError } = await supabase.from("tours").select("*");
+    if (toursError) throw toursError;
+
+    console.log("Loaded tours:", toursData);
+
+    // Load planning tasks
+    const { data: tasksData, error: tasksError } = await supabase.from("planning_tasks").select("*");
+    if (tasksError) {
+      console.error("Error loading planning tasks:", tasksError);
+      throw tasksError;
+    }
+
+    console.log("Loaded planning tasks from database:", tasksData);
+
+    // Process planning tasks
+    const planningTasks = tasksData.map((task: any) => {
+      // Handle travelers and assignedTo which could be arrays or strings
+      let travelers: string[] = [];
+      let assignedTo: string[] = [];
+
+      // Handle travelers field
+      if (task.travelers) {
+        if (Array.isArray(task.travelers)) {
+          travelers = task.travelers;
+        } else if (typeof task.travelers === "string") {
+          try {
+            travelers = JSON.parse(task.travelers);
+          } catch (e) {
+            console.error("Error parsing travelers:", e);
+          }
+        }
+      }
+
+      // Handle assigned_to field
+      if (task.assigned_to) {
+        if (Array.isArray(task.assigned_to)) {
+          assignedTo = task.assigned_to;
+        } else if (typeof task.assigned_to === "string") {
+          try {
+            assignedTo = JSON.parse(task.assigned_to);
+          } catch (e) {
+            console.error("Error parsing assignedTo:", e);
+          }
+        }
+      }
+
+      const planningTask: PlanningTask = {
+        id: task.id,
+        tourId: task.tour_id,
+        title: task.title,
+        cost: typeof task.cost === "number" ? task.cost : 0,
+        currencyCode: task.currency_code || "",
+        location: task.location || "",
+        date: task.date,
+        priority: task.priority,
+        travelers: travelers,
+        assignedTo: assignedTo,
+        completed: task.completed || false,
+      };
+
+      console.log("Processed planning task:", planningTask);
+      return planningTask;
+    });
+
+    console.log("All processed planning tasks:", planningTasks);
+
+    // Initialize tours with basic data
+    const toursPromises = toursData.map(async (tourData: any) => {
+      try {
+        // Load travelers for this tour
+        const { data: travelers, error: travelersError } = await supabase.from("travelers").select("*").eq("tour_id", tourData.id);
+
+        if (travelersError) {
+          console.error(`Error loading travelers for tour ${tourData.id}:`, travelersError);
+          return null;
+        }
+
+        // Load currencies for this tour
+        const { data: currencies, error: currenciesError } = await supabase.from("currencies").select("*").eq("tour_id", tourData.id);
+
+        if (currenciesError) {
+          console.error(`Error loading currencies for tour ${tourData.id}:`, currenciesError);
+          return null;
+        }
+
+        // Load expenses for this tour
+        const { data: expenses, error: expensesError } = await supabase.from("expenses").select("*").eq("tour_id", tourData.id);
+
+        if (expensesError) {
+          console.error(`Error loading expenses for tour ${tourData.id}:`, expensesError);
+          return null;
+        }
+
+        // Load expense splits for each expense
+        const expensesWithSplits = await Promise.all(
+          expenses.map(async (expense: any) => {
+            const { data: splits, error: splitsError } = await supabase.from("expense_splits").select("*").eq("expense_id", expense.id);
+
+            if (splitsError) {
+              console.error(`Error loading splits for expense ${expense.id}:`, splitsError);
+              return {
+                ...expense,
+                splits: [],
+              };
+            }
+
+            return {
+              id: expense.id,
+              description: expense.description,
+              amount: expense.amount,
+              currencyCode: expense.currency_code,
+              baseAmount: expense.base_amount,
+              baseCurrencyCode: expense.base_currency_code,
+              date: expense.date,
+              paidById: expense.paid_by_id,
+              categoryId: expense.category_id,
+              splits: splits.map((split: any) => ({
+                travelerId: split.traveler_id,
+                amount: split.amount,
+                baseAmount: split.base_amount,
+                percentage: 0, // Calculate this if needed
+              })),
+              createdAt: expense.created_at,
+            };
+          })
+        );
+
+        // Load payments for this tour
+        const { data: payments, error: paymentsError } = await supabase.from("payments").select("*").eq("tour_id", tourData.id);
+
+        if (paymentsError) {
+          console.error(`Error loading payments for tour ${tourData.id}:`, paymentsError);
+          return null;
+        }
+
+        // Filter planning tasks for this tour
+        const tourPlanningTasks = planningTasks.filter((task) => task.tourId === tourData.id);
+
+        // Return the complete tour object
+        return {
+          id: tourData.id,
+          name: tourData.name,
+          baseCurrencyCode: tourData.base_currency_code,
+          travelers: travelers.map((traveler: any) => ({
+            id: traveler.id,
+            name: traveler.name,
+          })),
+          currencies: currencies.map((currency: any) => ({
+            code: currency.code,
+            name: currency.name,
+            exchangeRate: currency.exchange_rate,
+          })),
+          expenses: expensesWithSplits.filter(Boolean),
+          payments: payments.map((payment: any) => ({
+            id: payment.id,
+            fromTravelerId: payment.from_traveler_id,
+            toTravelerId: payment.to_traveler_id,
+            amount: payment.amount,
+            currencyCode: payment.currency_code,
+            date: payment.date,
+            description: payment.description || "",
+            method: payment.method,
+            notes: payment.notes,
+            createdAt: payment.created_at,
+          })),
+          planningTasks: tourPlanningTasks,
+          createdAt: tourData.created_at,
+          updatedAt: tourData.updated_at,
+        };
+      } catch (error) {
+        console.error(`Error processing tour ${tourData.id}:`, error);
+        return null;
+      }
+    });
+
+    // Wait for all tour data to be loaded
+    const toursResults = await Promise.all(toursPromises);
+
+    // Filter out any null tours (from errors)
+    const validTours = toursResults.filter(Boolean) as Tour[];
+
+    // Create a new state object with the loaded data
+    const result: AppState = {
+      tours: validTours,
+      activeTourId: initialState.activeTourId,
+      expenseCategories: initialState.expenseCategories,
+      planningTasks: planningTasks,
+    };
+
+    console.log("Loaded app state:", result);
+    return result;
+  } catch (error) {
+    console.error("Error loading app state:", error);
+    return initialState;
   }
 };
 
@@ -219,30 +472,41 @@ export const saveTour = async (tour: Tour): Promise<void> => {
             } else {
               // Handle expense splits
               if (expense.splits && expense.splits.length > 0) {
-                // First delete all splits for this expense
-                const { error: deleteSplitsError } = await supabase.from("expense_splits").delete().eq("expense_id", expense.id);
+                try {
+                  // First delete all splits for this expense
+                  const { error: deleteSplitsError } = await supabase.from("expense_splits").delete().eq("expense_id", expense.id);
 
-                if (deleteSplitsError) {
-                  console.error("Error deleting expense splits:", deleteSplitsError);
-                } else {
-                  // Then insert all current splits
-                  const splitsToInsert = expense.splits.map((split) => {
-                    // Cast to extended interface
-                    const extendedSplit = split as unknown as ExtendedExpenseSplit;
+                  if (deleteSplitsError) {
+                    console.error("Error deleting expense splits:", deleteSplitsError);
+                  } else {
+                    // Then insert all current splits
+                    const splitsToInsert = expense.splits.map((split) => {
+                      // Cast to extended interface
+                      const extendedSplit = split as unknown as ExtendedExpenseSplit;
 
-                    return {
-                      expense_id: expense.id,
-                      traveler_id: split.travelerId,
-                      amount: split.amount,
-                      base_amount: extendedSplit.baseAmount || split.amount,
-                    };
-                  });
+                      return {
+                        expense_id: expense.id,
+                        traveler_id: split.travelerId,
+                        amount: split.amount,
+                        base_amount: extendedSplit.baseAmount || split.amount,
+                      };
+                    });
 
-                  const { error: insertSplitsError } = await supabase.from("expense_splits").insert(splitsToInsert);
-
-                  if (insertSplitsError) {
-                    console.error("Error inserting expense splits:", insertSplitsError);
+                    // Insert splits one by one to avoid conflicts
+                    for (const split of splitsToInsert) {
+                      try {
+                        const { error: insertSplitError } = await supabase.from("expense_splits").insert(split);
+                        if (insertSplitError && insertSplitError.code !== "23505") {
+                          // Ignore duplicate key errors
+                          console.error("Error inserting expense split:", insertSplitError, split);
+                        }
+                      } catch (error) {
+                        // Ignore errors and continue with the next split
+                      }
+                    }
                   }
+                } catch (error) {
+                  console.error("Error handling expense splits:", error);
                 }
               }
             }

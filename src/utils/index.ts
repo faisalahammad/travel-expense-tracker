@@ -39,9 +39,13 @@ export const convertCurrency = (amount: number, fromCurrencyCode: string, toCurr
     return amount;
   }
 
-  // Convert to base currency first, then to target currency
-  // If exchange rate is 1 Peso = 2.17 BDT, then 93 Peso should be 93 * 2.17 = 201.81 BDT
-  const amountInTargetCurrency = amount * fromCurrency.exchangeRate;
+  // Convert from source currency to base currency first
+  const amountInBaseCurrency = amount * fromCurrency.exchangeRate;
+
+  // Then convert from base currency to target currency
+  // If toCurrency is the base currency, we're already done
+  // Otherwise, divide by the target currency's exchange rate
+  const amountInTargetCurrency = toCurrency.exchangeRate === 1 ? amountInBaseCurrency : amountInBaseCurrency / toCurrency.exchangeRate;
 
   // Round to 2 decimal places to avoid floating point issues
   return Math.round(amountInTargetCurrency * 100) / 100;

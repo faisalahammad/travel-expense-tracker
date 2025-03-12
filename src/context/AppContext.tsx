@@ -1,9 +1,8 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
-import { AppState, Currency, DEFAULT_EXPENSE_CATEGORIES, Expense, ExpenseCategory, PaymentRecord, Tour } from "../types";
+import { AppState, Currency, DEFAULT_EXPENSE_CATEGORIES, Expense, ExpenseCategory, PaymentRecord, PlanningTask, Tour } from "../types/index";
 import { parseShareableLink } from "../utils";
-import { loadAppState } from "../utils/loadAppState";
-import { deleteTour as deleteSupabaseTour, saveAppState } from "../utils/supabase";
+import { deleteTour as deleteSupabaseTour, loadAppState, saveAppState } from "../utils/supabase";
 
 // Extend ExpenseSplit interface to include percentage property
 interface ExtendedExpenseSplit {
@@ -29,6 +28,10 @@ interface AppContextType {
   removeExpense: (tourId: string, expenseId: string) => void;
   addPayment: (tourId: string, paymentData: Omit<PaymentRecord, "id" | "createdAt">) => void;
   removePayment: (tourId: string, paymentId: string) => void;
+  addPlanningTask: (task: PlanningTask) => void;
+  updatePlanningTask: (taskId: string, task: Partial<PlanningTask>) => void;
+  deletePlanningTask: (taskId: string) => void;
+  toggleTaskCompletion: (tourId: string, taskId: string) => void;
   importTourFromLink: (url: string) => boolean;
   addExpenseCategory: (category: Omit<ExpenseCategory, "id">) => void;
   updateExpenseCategory: (categoryId: string, updates: Partial<ExpenseCategory>) => void;
@@ -41,6 +44,7 @@ const initialState: AppState = {
   tours: [],
   activeTourId: null,
   expenseCategories: DEFAULT_EXPENSE_CATEGORIES,
+  planningTasks: [],
 };
 
 // Helper function to get currency name from code
@@ -92,17 +96,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               tours: [...prevState.tours, parsedTour],
               activeTourId: parsedTour.id,
             }));
-
-            // Clear URL parameters after loading
-            window.history.replaceState({}, document.title, window.location.pathname);
-            setIsInitialized(true);
-            return;
           }
+        } else {
+          // Otherwise, load data from Supabase
+          console.log("Loading app state from Supabase...");
+          const loadedState = await loadAppState(initialState);
+          console.log("Loaded state from Supabase:", loadedState);
+          setState(loadedState);
         }
 
-        // If no tour data in URL, load from Supabase
-        const appState = await loadAppState(initialState);
-        setState(appState);
         setIsInitialized(true);
       } catch (error) {
         console.error("Error initializing app:", error);
@@ -140,6 +142,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         ],
         expenses: [],
         payments: [],
+        planningTasks: [],
         createdAt: now,
         updatedAt: now,
       };
@@ -444,6 +447,58 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }));
   };
 
+  const addPlanningTask = (task: PlanningTask) => {
+    setState((prevState) => {
+      // Ensure planningTasks is initialized
+      const planningTasks = Array.isArray(prevState.planningTasks) ? [...prevState.planningTasks, task] : [task];
+
+      return {
+        ...prevState,
+        planningTasks,
+      };
+    });
+  };
+
+  const updatePlanningTask = (taskId: string, task: Partial<PlanningTask>) => {
+    setState((prevState) => {
+      // Ensure planningTasks is an array
+      const planningTasks = Array.isArray(prevState.planningTasks) ? prevState.planningTasks : [];
+
+      return {
+        ...prevState,
+        planningTasks: planningTasks.map((t) => (t.id === taskId ? { ...t, ...task } : t)),
+      };
+    });
+  };
+
+  const deletePlanningTask = (taskId: string) => {
+    setState((prevState) => {
+      // Ensure planningTasks is an array
+      const planningTasks = Array.isArray(prevState.planningTasks) ? prevState.planningTasks : [];
+
+      return {
+        ...prevState,
+        planningTasks: planningTasks.filter((t) => t.id !== taskId),
+      };
+    });
+  };
+
+  const toggleTaskCompletion = (tourId: string, taskId: string) => {
+    setState((prevState) => ({
+      ...prevState,
+      tours: prevState.tours.map((tour) => {
+        if (tour.id === tourId) {
+          return {
+            ...tour,
+            planningTasks: tour.planningTasks.map((task) => (task.id === taskId ? { ...task, completed: !task.completed } : task)),
+            updatedAt: new Date().toISOString(),
+          };
+        }
+        return tour;
+      }),
+    }));
+  };
+
   const contextValue: AppContextType = {
     state,
     createTour,
@@ -465,6 +520,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addExpenseCategory,
     updateExpenseCategory,
     removeExpenseCategory,
+    addPlanningTask,
+    updatePlanningTask,
+    deletePlanningTask,
+    toggleTaskCompletion,
   };
 
   return <AppContext.Provider value={contextValue}>{children}</AppContext.Provider>;

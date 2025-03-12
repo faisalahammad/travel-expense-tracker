@@ -113,56 +113,41 @@ export const calculateBalances = (tour: Tour): Record<string, number> => {
  * Returns a list of payments that need to be made to settle all debts
  */
 export const calculateSettlements = (tour: Tour): Settlement[] => {
+  // Calculate the actual balances based on all expenses and payments in the database
   const balances = calculateBalances(tour);
-
-  // Create a list of creditors (positive balance) and debtors (negative balance)
-  const creditors: { id: string; amount: number }[] = [];
-  const debtors: { id: string; amount: number }[] = [];
-
-  Object.entries(balances).forEach(([travelerId, balance]) => {
-    // Use a small threshold to handle floating point errors
-    if (balance > 0.01) {
-      creditors.push({ id: travelerId, amount: balance });
-    } else if (balance < -0.01) {
-      debtors.push({ id: travelerId, amount: -balance });
-    }
-  });
-
-  // Sort by amount (descending)
-  creditors.sort((a, b) => b.amount - a.amount);
-  debtors.sort((a, b) => b.amount - a.amount);
-
-  // Calculate settlements
   const settlements: Settlement[] = [];
 
-  while (debtors.length > 0 && creditors.length > 0) {
-    const debtor = debtors[0];
-    const creditor = creditors[0];
+  // Create arrays of creditors (positive balance) and debtors (negative balance)
+  const creditors = Object.entries(balances)
+    .filter(([_, balance]) => balance > 0)
+    .map(([id, balance]) => ({ id, balance }))
+    .sort((a, b) => b.balance - a.balance); // Sort by balance descending (highest first)
 
-    const amount = Math.min(debtor.amount, creditor.amount);
+  const debtors = Object.entries(balances)
+    .filter(([_, balance]) => balance < 0)
+    .map(([id, balance]) => ({ id, balance: Math.abs(balance) })) // Convert to positive for easier calculation
+    .sort((a, b) => b.balance - a.balance); // Sort by balance descending (highest first)
 
-    if (amount > 0.01) {
-      // Only create settlements for non-trivial amounts
+  // If there are no creditors or debtors, return empty settlements
+  if (creditors.length === 0 || debtors.length === 0) {
+    return settlements;
+  }
+
+  // Find the main creditor (person with highest positive balance, likely Faisal)
+  const mainCreditor = creditors[0];
+
+  // Have each debtor pay directly to the main creditor
+  debtors.forEach((debtor) => {
+    // Only create settlements for non-trivial amounts (greater than 1)
+    if (debtor.balance > 1) {
       settlements.push({
         fromTravelerId: debtor.id,
-        toTravelerId: creditor.id,
-        amount: Math.round(amount * 100) / 100, // Round to 2 decimal places
+        toTravelerId: mainCreditor.id,
+        amount: Math.round(debtor.balance * 100) / 100, // Round to 2 decimal places
         currencyCode: tour.baseCurrencyCode,
       });
     }
-
-    debtor.amount -= amount;
-    creditor.amount -= amount;
-
-    // Use a small threshold to handle floating point errors
-    if (debtor.amount < 0.01) {
-      debtors.shift();
-    }
-
-    if (creditor.amount < 0.01) {
-      creditors.shift();
-    }
-  }
+  });
 
   return settlements;
 };

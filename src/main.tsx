@@ -3,9 +3,21 @@ import { LocalizationProvider } from "@mui/x-date-pickers";
 import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
 import React, { useState } from "react";
 import ReactDOM from "react-dom/client";
+import { registerSW } from "virtual:pwa-register";
 import App from "./App";
 import "./index.css";
 import { initializeDatabase } from "./utils/initializeDatabase";
+
+// Register service worker
+const updateSW = registerSW({
+  onNeedRefresh() {
+    // This will trigger the vite-pwa:updated event that our PWAInstallPrompt component listens for
+    document.dispatchEvent(new Event("vite-pwa:updated"));
+  },
+  onOfflineReady() {
+    console.log("App is ready for offline use");
+  },
+});
 
 // Create a theme instance
 const theme = createTheme({
