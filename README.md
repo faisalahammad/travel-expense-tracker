@@ -11,6 +11,7 @@ A React application for tracking and splitting expenses among travelers during t
     - [Prerequisites](#prerequisites)
     - [Installation](#installation)
     - [Environment Setup](#environment-setup)
+    - [PWA Configuration](#pwa-configuration)
   - [Database Setup](#database-setup)
     - [Database Structure](#database-structure)
   - [Running the Application](#running-the-application)
@@ -23,9 +24,15 @@ A React application for tracking and splitting expenses among travelers during t
     - [Managing Travelers](#managing-travelers)
     - [Setting Up Currencies](#setting-up-currencies)
     - [Adding Expenses](#adding-expenses)
+    - [Planning Your Trip](#planning-your-trip)
     - [Understanding Settlements](#understanding-settlements)
     - [Exporting Data](#exporting-data)
+    - [Installing as a Mobile App](#installing-as-a-mobile-app)
+      - [For iOS (Safari):](#for-ios-safari)
+      - [For Android (Chrome):](#for-android-chrome)
+      - [Benefits of Installing as a PWA:](#benefits-of-installing-as-a-pwa)
   - [How Currency Conversion Works](#how-currency-conversion-works)
+    - [Adding Currencies Manually](#adding-currencies-manually)
   - [Best Practices](#best-practices)
     - [Do:](#do)
     - [Don't:](#dont)
@@ -33,6 +40,7 @@ A React application for tracking and splitting expenses among travelers during t
     - [Data Not Saving](#data-not-saving)
     - [Currency Conversion Issues](#currency-conversion-issues)
     - [Settlement Calculation Problems](#settlement-calculation-problems)
+    - [PWA and Offline Usage Issues](#pwa-and-offline-usage-issues)
   - [License](#license)
   - [Acknowledgments](#acknowledgments)
 
@@ -47,10 +55,12 @@ A React application for tracking and splitting expenses among travelers during t
 - **Split Expenses**: Split expenses equally or with custom amounts
 - **Payment Tracking**: Record payments between travelers
 - **Settlement Calculation**: Calculate who owes whom with minimum transactions
+- **Trip Planning**: Create and manage tasks for your trip with priorities, assignments, and costs
 - **Visual Analytics**: View expense distribution by category
 - **Cloud Data Storage**: Store data in Supabase for global access
 - **Export to Excel**: Export tour data to Excel for record-keeping
 - **Responsive Design**: Works on desktop, tablet, and mobile devices
+- **Progressive Web App (PWA)**: Install on mobile devices for offline access and native app-like experience
 
 ## Getting Started
 
@@ -85,6 +95,45 @@ A React application for tracking and splitting expenses among travelers during t
    ```
 
 2. Replace `your_supabase_url` and `your_supabase_anon_key` with your actual Supabase project URL and anonymous key, which you can find in your Supabase project settings under API.
+
+### PWA Configuration
+
+The application is configured as a Progressive Web App (PWA) using Vite PWA plugin. The configuration is in the `vite.config.ts` file:
+
+1. Make sure the PWA plugin is installed:
+
+   ```bash
+   npm install vite-plugin-pwa -D
+   ```
+
+2. The PWA configuration includes:
+
+   - App name and short name
+   - Theme colors and icons
+   - Service worker strategy
+   - Offline fallback page
+
+3. To customize the PWA settings, edit the `pwa` section in `vite.config.ts`:
+
+   ```typescript
+   VitePWA({
+     registerType: "autoUpdate",
+     includeAssets: ["favicon.ico", "apple-touch-icon.png", "masked-icon.svg"],
+     manifest: {
+       name: "Travel Expense Tracker",
+       short_name: "ExpenseTracker",
+       theme_color: "#1976d2",
+       icons: [
+         // ... icon configurations
+       ],
+     },
+     workbox: {
+       // Workbox options
+     },
+   });
+   ```
+
+4. Make sure to include appropriate icons in different sizes in the `public` directory for the PWA to use.
 
 ## Database Setup
 
@@ -149,6 +198,7 @@ The application uses the following tables:
    - Primary key: (expense_id, traveler_id)
 
 7. **payments**: Stores payment information
+
    - `id`: UUID (primary key)
    - `tour_id`: UUID (foreign key to tours)
    - `from_traveler_id`: UUID (foreign key to travelers)
@@ -157,6 +207,20 @@ The application uses the following tables:
    - `currency_code`: Text
    - `date`: Timestamp
    - `description`: Text
+   - `created_at`: Timestamp
+
+8. **planning_tasks**: Stores trip planning tasks
+   - `id`: UUID (primary key)
+   - `tour_id`: UUID (foreign key to tours)
+   - `title`: Text
+   - `cost`: Numeric (optional)
+   - `currency_code`: Text (optional)
+   - `location`: Text (optional)
+   - `date`: Timestamp
+   - `priority`: Text (LOW, MEDIUM, HIGH)
+   - `travelers`: Text[] (array of traveler IDs)
+   - `assigned_to`: Text[] (array of traveler IDs)
+   - `completed`: Boolean
    - `created_at`: Timestamp
 
 ## Running the Application
@@ -287,6 +351,30 @@ The built files will be in the `dist` directory and can be served by any static 
 5. Click "Save"
 6. The expense will appear in the list, grouped by date
 
+### Planning Your Trip
+
+The Planning page helps you organize tasks and activities for your trip:
+
+1. Navigate to the "Planning" page
+2. Click "Add Task" to create a new task
+3. Fill in the task details:
+   - Title (required)
+   - Cost (optional)
+   - Currency (defaults to base currency)
+   - Location (optional)
+   - Date (required)
+   - Priority (High, Medium, Low)
+   - Travelers involved
+   - Assigned to (who's responsible)
+4. Click "Save"
+5. Tasks will appear in the list, grouped by date
+6. You can:
+   - Mark tasks as complete by clicking the circle icon
+   - Edit tasks by clicking the edit icon
+   - Delete tasks by clicking the delete icon
+   - Expand tasks to see more details
+7. Use the search and filter options at the top to find specific tasks
+
 ### Understanding Settlements
 
 The Settlements page provides a comprehensive overview of the financial state of your tour:
@@ -296,11 +384,30 @@ The Settlements page provides a comprehensive overview of the financial state of
 3. **Expense Totals by Traveler**: Shows each traveler's total expenses and payments
 4. **Settlement Plan**: Shows who should pay whom to settle all debts
 
+The Settlement Plan works like this:
+
+1. The system calculates each traveler's balance based on:
+   - Expenses they paid for
+   - Their share of all expenses
+   - Payments they've made or received
+2. Travelers with negative balances owe money
+3. Travelers with positive balances are owed money
+4. The system creates a simplified plan where:
+   - The person with the highest positive balance (main creditor) receives payments from everyone who owes money
+   - This minimizes the number of transactions needed to settle all debts
+5. For each payment in the plan, you'll see:
+   - Who needs to pay
+   - Who should receive the payment
+   - The exact amount
+   - Current balance information for both travelers
+
 To record a payment:
 
 1. Click "Record Payment" next to a settlement
-2. Fill in the payment details
-3. Click "Save"
+2. The payment form will be pre-filled with the suggested amount and travelers
+3. You can adjust the details if needed
+4. Click "Save" to record the payment
+5. The settlement plan will automatically update based on the new payment
 
 ### Exporting Data
 
@@ -314,6 +421,35 @@ To record a payment:
    - Expense splits
    - Payments
    - Settlements
+
+### Installing as a Mobile App
+
+The Travel Expense Tracker is a Progressive Web App (PWA), which means you can install it on your mobile device and use it like a native app:
+
+#### For iOS (Safari):
+
+1. Visit the app in Safari
+2. Tap the Share button (the square with an arrow pointing upward)
+3. Scroll down and tap "Add to Home Screen"
+4. Give the app a name (or keep the default)
+5. Tap "Add" in the top-right corner
+6. The app icon will appear on your home screen
+
+#### For Android (Chrome):
+
+1. Visit the app in Chrome
+2. Tap the three-dot menu in the top-right corner
+3. Tap "Add to Home Screen" or "Install app"
+4. Follow the prompts to install
+5. The app icon will appear on your home screen
+
+#### Benefits of Installing as a PWA:
+
+- Access the app directly from your home screen
+- Use the app in full-screen mode without browser navigation bars
+- Faster loading times after the first visit
+- Some offline functionality (basic app structure will load even without internet)
+- Automatic updates when new versions are released
 
 ## How Currency Conversion Works
 
@@ -374,6 +510,7 @@ Remember to update exchange rates periodically if they change significantly duri
 - Use categories consistently to get meaningful analytics
 - Export data regularly as a backup
 - Record payments as they happen to keep settlements up to date
+- Use the Planning page to organize your trip activities and assign responsibilities
 
 ### Don't:
 
@@ -402,6 +539,20 @@ Remember to update exchange rates periodically if they change significantly duri
 1. Verify that all expenses have been correctly split
 2. Check that all payments have been recorded
 3. Ensure all currencies have correct exchange rates
+
+### PWA and Offline Usage Issues
+
+1. **App not installing**: Make sure you're using a supported browser (Chrome, Edge, Safari, etc.)
+2. **Offline access not working**: The app requires an initial load with internet connection to cache resources
+3. **Data not syncing**:
+   - When you regain internet connection, refresh the app to sync pending changes
+   - If changes aren't appearing, try closing and reopening the app
+4. **App not updating**:
+   - Clear the browser cache for the site
+   - Uninstall and reinstall the PWA from your home screen
+5. **Storage issues**:
+   - PWAs have limited storage on some devices
+   - If you encounter storage errors, try clearing the site data in your browser settings
 
 ## License
 
