@@ -42,7 +42,6 @@ A React application for tracking and splitting expenses among travelers during t
     - [Settlement Calculation Problems](#settlement-calculation-problems)
     - [PWA and Offline Usage Issues](#pwa-and-offline-usage-issues)
   - [License](#license)
-  - [Acknowledgments](#acknowledgments)
 
 ## Features
 
@@ -557,9 +556,3 @@ Remember to update exchange rates periodically if they change significantly duri
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Acknowledgments
-
-- Inspired by the need to simplify expense tracking during group travels
-- Thanks to all contributors who have helped improve this project
-- Special thanks to Faisal for the project idea and development
