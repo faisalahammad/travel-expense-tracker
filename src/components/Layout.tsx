@@ -4,6 +4,7 @@ import { AppBar, Box, Button, Container, CssBaseline, Divider, Drawer, FormContr
 import React, { useState } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAppContext } from "../context/AppContext";
+import PWAInstallPrompt from "./PWAInstallPrompt";
 
 const drawerWidth = 240;
 
@@ -218,7 +219,7 @@ const Layout: React.FC = () => {
         <Container maxWidth="lg">
           <Typography variant="body2" align="center">
             © {new Date().getFullYear()} Travel Expense Tracker | Built with ❤️ by{" "}
-            <a href="https://faisalahammad.com" target="_blank" rel="noopener noreferrer">
+            <a href="https://faisalahammad.com" target="_blank" rel="noopener noreferrer" style={{ color: "white" }}>
               Faisal
             </a>
           </Typography>
@@ -227,6 +228,9 @@ const Layout: React.FC = () => {
           </Typography>
         </Container>
       </Box>
+
+      {/* PWA Install Prompt */}
+      <PWAInstallPrompt />
     </Box>
   );
 };
