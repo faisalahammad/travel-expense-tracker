@@ -139,8 +139,11 @@ The application is configured as a Progressive Web App (PWA) using Vite PWA plug
 1. Create a Supabase account at [https://supabase.com](https://supabase.com) if you don't have one
 2. Create a new project
 3. Go to the SQL Editor in your Supabase dashboard
-4. Run the SQL commands from the `supabase-setup.sql` file to create the necessary tables
-5. Run the SQL commands from the `supabase-update.sql` file to add the base currency columns
+4. Run the SQL commands from the `travel-expense-tracker-db-setup.sql` file to create all necessary tables, functions, and initial data
+
+> **Note**: The `travel-expense-tracker-db-setup.sql` file contains all the necessary SQL commands to set up the complete database structure in one go. This is the recommended approach for new installations.
+
+> **For existing installations**: If you've previously used `supabase-setup.sql` and `supabase-update.sql` files, you can continue using those, but the comprehensive file is recommended for new installations as it includes all the latest schema changes.
 
 ### Database Structure
 
