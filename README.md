@@ -6,6 +6,7 @@ A React application for tracking and splitting expenses among travelers during t
 
 - [Travel Expense Tracker](#travel-expense-tracker)
   - [Table of Contents](#table-of-contents)
+  - [Screenshots](#screenshots)
   - [Features](#features)
   - [Getting Started](#getting-started)
     - [Prerequisites](#prerequisites)
@@ -42,6 +43,13 @@ A React application for tracking and splitting expenses among travelers during t
     - [Settlement Calculation Problems](#settlement-calculation-problems)
     - [PWA and Offline Usage Issues](#pwa-and-offline-usage-issues)
   - [License](#license)
+
+## Screenshots
+
+![Home Page](https://i.ibb.co/gZr0FSmZ/Google-Chrome-2025-03-12-15-29-35.jpg)
+![Expense Page](https://i.ibb.co/TxfWzG5g/Google-Chrome-2025-03-12-15-29-36.jpg)
+![Settlement Page](https://i.ibb.co/SXDCxZsp/Google-Chrome-2025-03-12-15-30-55.jpg)
+![Planning Page](https://i.ibb.co/HT7csMvP/Google-Chrome-2025-03-12-15-29-47.jpg)
 
 ## Features
 
