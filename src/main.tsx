@@ -63,7 +63,7 @@ const DatabaseSetupMessage = () => {
             </li>
             <li>
               <Typography variant="body1" paragraph>
-                Copy and paste the SQL from the <code>supabase-setup.sql</code> file in the project root
+                Copy and paste the SQL from the <code>travel-expense-tracker-db-setup.sql</code> file in the project root
               </Typography>
             </li>
             <li>
