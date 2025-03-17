@@ -55,7 +55,6 @@ const Layout: React.FC = () => {
   // Define navigation items
   const navItems = [
     { text: "Home", path: "/", icon: <ExploreIcon /> },
-    { text: "Tours", path: "/tours", icon: <ExploreIcon /> },
     { text: "Expenses", path: "/expenses", icon: <ReceiptLongIcon /> },
     { text: "Settlements", path: "/settlements", icon: <SwapHorizIcon /> },
     { text: "Planning", path: "/planning", icon: <AssignmentIcon /> },

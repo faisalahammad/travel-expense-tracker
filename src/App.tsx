@@ -11,7 +11,6 @@ import Expenses from "./pages/Expenses";
 import Home from "./pages/Home";
 import Planning from "./pages/Planning";
 import Settlements from "./pages/Settlements";
-import Tours from "./pages/Tours";
 import Travelers from "./pages/Travelers";
 
 // Create a theme instance with multiple colors
@@ -103,7 +102,6 @@ const AppRoutes: React.FC = () => {
         <Route element={<ProtectedRoute redirectPath="/auth" />}>
           <Route path="/" element={<Layout />}>
             <Route index element={<Home />} />
-            <Route path="tours" element={<Tours />} />
             <Route path="travelers" element={<Travelers />} />
             <Route path="currencies" element={<Currencies />} />
             <Route path="expenses" element={<Expenses />} />

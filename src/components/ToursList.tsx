@@ -1,28 +1,26 @@
 import { Check as CheckIcon, Close as CloseIcon, Delete as DeleteIcon, Edit as EditIcon, CheckCircle as SelectIcon } from "@mui/icons-material";
 import { Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Divider, IconButton, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography } from "@mui/material";
 import React, { useMemo, useState } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
-import CreateTourForm from "../components/CreateTourForm";
+import { useNavigate } from "react-router-dom";
 import { useAppContext } from "../context/AppContext";
 import { useAuth } from "../context/AuthContext";
+import CreateTourForm from "./CreateTourForm";
 
-const Tours: React.FC = () => {
+interface ToursListProps {
+  showTitle?: boolean;
+}
+
+const ToursList: React.FC<ToursListProps> = ({ showTitle = true }) => {
   const { authState } = useAuth();
   const { state, updateTour, deleteTour, setActiveTour } = useAppContext();
   const { tours } = state;
   const navigate = useNavigate();
 
-  // Define state variables before the conditional return
   const [editingTourId, setEditingTourId] = useState<string | null>(null);
   const [editTourName, setEditTourName] = useState("");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [tourToDelete, setTourToDelete] = useState<string | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
-
-  // If not authenticated, redirect to auth page
-  if (!authState.isAuthenticated) {
-    return <Navigate to="/auth" replace />;
-  }
 
   // Filter tours to only show the ones created by the current user
   const userTours = useMemo(() => {
@@ -33,7 +31,6 @@ const Tours: React.FC = () => {
       }
 
       // Also check if the tour has a userId that matches the user's ID from the database
-      // This handles the case where tours were created with a user_id but no email
       if (tour.userId && authState.userId && tour.userId === authState.userId) {
         return true;
       }
@@ -92,9 +89,11 @@ const Tours: React.FC = () => {
 
   return (
     <>
-      <Typography variant="h4" component="h1" gutterBottom>
-        Manage Tours
-      </Typography>
+      {showTitle && (
+        <Typography variant="h4" component="h1" gutterBottom>
+          Manage Tours
+        </Typography>
+      )}
 
       {!showCreateForm ? (
         <Paper elevation={2} sx={{ p: 3, mb: 4 }}>
@@ -202,4 +201,4 @@ const Tours: React.FC = () => {
   );
 };
 
-export default Tours;
+export default ToursList;
