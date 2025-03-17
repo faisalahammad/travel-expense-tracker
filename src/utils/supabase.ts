@@ -358,27 +358,27 @@ export const saveTour = async (tour: Tour): Promise<void> => {
     // Handle currencies
     if (tour.currencies && tour.currencies.length > 0) {
       try {
-        // First delete all currencies for this tour
+        // Map currencies to the format expected by Supabase
+        const currenciesToUpsert = tour.currencies.map((currency) => ({
+          // Don't include id in the upsert
+          tour_id: tour.id,
+          code: currency.code,
+          name: currency.name,
+          exchange_rate: currency.exchangeRate,
+        }));
+
+        // First delete existing currencies for this tour
         const { error: deleteError } = await supabase.from("currencies").delete().eq("tour_id", tour.id);
 
         if (deleteError) {
-          console.error("Error deleting currencies:", deleteError);
-        } else {
-          // Then insert all current currencies using upsert to handle conflicts
-          const currenciesToUpsert = tour.currencies.map((currency) => ({
-            id: `${tour.id}_${currency.code}`, // Create a composite primary key
-            tour_id: tour.id,
-            code: currency.code,
-            name: currency.name,
-            exchange_rate: currency.exchangeRate,
-          }));
+          console.error("Error deleting existing currencies:", deleteError);
+        }
 
-          // Use upsert to handle any conflicts
-          const { error: upsertError } = await supabase.from("currencies").upsert(currenciesToUpsert);
+        // Then insert new currencies
+        const { error: insertError } = await supabase.from("currencies").insert(currenciesToUpsert);
 
-          if (upsertError) {
-            console.error("Error upserting currencies:", upsertError);
-          }
+        if (insertError) {
+          console.error("Error inserting currencies:", insertError);
         }
       } catch (error) {
         console.error("Error handling currencies:", error);

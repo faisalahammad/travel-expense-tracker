@@ -126,7 +126,7 @@ const Currencies: React.FC = () => {
         Tour: {activeTour.name}
       </Typography>
       <Box sx={{ mb: 4 }}>
-        <Typography variant="body1">
+        <Typography variant="body1" component="div">
           Base Currency: <Chip label={activeTour.baseCurrencyCode} color="primary" /> (Exchange Rate: 1.0)
         </Typography>
       </Box>
