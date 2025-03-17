@@ -1,85 +1,93 @@
 import { Box, Container, Typography } from "@mui/material";
-import React, { useEffect, useState } from "react";
-import { Navigate, useLocation } from "react-router-dom";
+import { useEffect } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import AccountSettings from "../components/AccountSettings";
 import CreateTourForm from "../components/CreateTourForm";
 import LoginForm from "../components/LoginForm";
+import RegisterForm from "../components/RegisterForm";
 import ResetPinForm from "../components/ResetPinForm";
 import { useAuth } from "../context/AuthContext";
 
 enum AuthView {
   LOGIN = "login",
-  RESET_PIN = "reset_pin",
-  CREATE_TOUR = "create_tour",
+  RESET_PIN = "reset-pin",
+  CREATE_TOUR = "create-tour",
+  REGISTER = "register",
   ACCOUNT = "account",
 }
 
-const Auth: React.FC = () => {
-  const { authState } = useAuth();
+const Auth = () => {
+  const { isAuthenticated } = useAuth();
+  const navigate = useNavigate();
   const location = useLocation();
-  const [currentView, setCurrentView] = useState<AuthView>(() => {
-    // Initialize the view based on the current path
-    return location.pathname === "/account" ? AuthView.ACCOUNT : AuthView.LOGIN;
-  });
 
-  // Update the view when the location changes
   useEffect(() => {
-    if (location.pathname === "/account") {
-      setCurrentView(AuthView.ACCOUNT);
-    } else if (location.pathname === "/auth") {
-      // Only reset to LOGIN if we're on the auth page and not already in RESET_PIN or CREATE_TOUR
-      if (currentView !== AuthView.RESET_PIN && currentView !== AuthView.CREATE_TOUR) {
-        setCurrentView(AuthView.LOGIN);
-      }
+    // If authenticated and not in account settings, redirect to /tours
+    if (isAuthenticated && !location.pathname.includes("/account")) {
+      navigate("/tours");
     }
-  }, [location.pathname, currentView]);
+  }, [isAuthenticated, location.pathname, navigate]);
 
-  // If user is already authenticated and trying to access login page, redirect to home
-  // But don't redirect if they're trying to access the account page
-  if (authState.isAuthenticated && currentView !== AuthView.ACCOUNT && location.pathname !== "/account") {
-    return <Navigate to="/" replace />;
-  }
-
-  // If user is not authenticated and trying to access account page, redirect to auth
-  if (!authState.isAuthenticated && location.pathname === "/account") {
-    return <Navigate to="/auth" replace />;
-  }
+  const getCurrentView = (): AuthView => {
+    if (location.pathname === "/reset-pin") return AuthView.RESET_PIN;
+    if (location.pathname === "/create-tour") return AuthView.CREATE_TOUR;
+    if (location.pathname === "/register") return AuthView.REGISTER;
+    if (location.pathname === "/account") return AuthView.ACCOUNT;
+    return AuthView.LOGIN;
+  };
 
   const handleLoginSuccess = () => {
-    // Redirect will happen automatically due to authState change
+    navigate("/tours");
   };
 
-  const handleForgotPin = () => {
-    setCurrentView(AuthView.RESET_PIN);
+  const handleRegisterSuccess = () => {
+    navigate("/login");
   };
 
-  const handleCreateTour = () => {
-    setCurrentView(AuthView.CREATE_TOUR);
+  const handleResetPinSuccess = () => {
+    navigate("/login");
+  };
+
+  const handleCreateTourSuccess = () => {
+    navigate("/tours");
   };
 
   const handleBackToLogin = () => {
-    setCurrentView(AuthView.LOGIN);
+    navigate("/login");
+  };
+
+  const handleRegister = () => {
+    navigate("/register");
+  };
+
+  const handleForgotPin = () => {
+    navigate("/reset-pin");
   };
 
   const renderView = () => {
+    const currentView = getCurrentView();
+    console.log("Current view:", currentView, "Path:", location.pathname);
+
     switch (currentView) {
       case AuthView.LOGIN:
-        return <LoginForm onSuccess={handleLoginSuccess} onForgotPin={handleForgotPin} onCreateTour={handleCreateTour} />;
+        return <LoginForm onSuccess={handleLoginSuccess} onForgotPin={handleForgotPin} onRegister={handleRegister} />;
       case AuthView.RESET_PIN:
-        return <ResetPinForm onSuccess={handleBackToLogin} onCancel={handleBackToLogin} />;
+        return <ResetPinForm onSuccess={handleResetPinSuccess} onCancel={handleBackToLogin} />;
       case AuthView.CREATE_TOUR:
-        return <CreateTourForm onSuccess={handleBackToLogin} onCancel={handleBackToLogin} />;
+        return <CreateTourForm onSuccess={handleCreateTourSuccess} onCancel={handleBackToLogin} />;
+      case AuthView.REGISTER:
+        return <RegisterForm onSuccess={handleRegisterSuccess} onCancel={handleBackToLogin} />;
       case AuthView.ACCOUNT:
         return <AccountSettings />;
       default:
-        return <LoginForm onSuccess={handleLoginSuccess} onForgotPin={handleForgotPin} onCreateTour={handleCreateTour} />;
+        return <LoginForm onSuccess={handleLoginSuccess} onForgotPin={handleForgotPin} onRegister={handleRegister} />;
     }
   };
 
   return (
-    <Container maxWidth="md">
-      <Box sx={{ mt: 4, mb: 8 }}>
-        <Typography variant="h4" component="h1" gutterBottom align="center" sx={{ mb: 4 }}>
+    <Container maxWidth="lg">
+      <Box sx={{ my: 4, textAlign: "center" }}>
+        <Typography variant="h4" component="h1" gutterBottom>
           Travel Expense Tracker
         </Typography>
         {renderView()}

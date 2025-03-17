@@ -1,5 +1,5 @@
 import { Visibility, VisibilityOff } from "@mui/icons-material";
-import { Alert, Box, Button, Card, CardContent, CircularProgress, Divider, FormControl, FormHelperText, IconButton, InputAdornment, InputLabel, MenuItem, Select, SelectChangeEvent, Tab, Tabs, TextField, Typography } from "@mui/material";
+import { Alert, Box, Button, Card, CardContent, CircularProgress, Divider, FormControl, FormHelperText, IconButton, InputAdornment, InputLabel, Select, Tab, Tabs, TextField, Typography } from "@mui/material";
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
@@ -170,10 +170,6 @@ const AccountSettings: React.FC = () => {
   const handleSecurityDataChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setSecurityData((prev) => ({ ...prev, [name]: value }));
-  };
-
-  const handleSecurityQuestionChange = (e: SelectChangeEvent<number>) => {
-    setSecurityData((prev) => ({ ...prev, securityQuestionId: e.target.value as number }));
   };
 
   const handleToggleShowSecurityPin = () => {
@@ -423,11 +419,14 @@ const AccountSettings: React.FC = () => {
 
             <FormControl fullWidth margin="normal" disabled={securityLoading || loadingQuestions}>
               <InputLabel id="security-question-label">Security Question</InputLabel>
-              <Select labelId="security-question-label" id="securityQuestionId" value={securityData.securityQuestionId} label="Security Question" onChange={handleSecurityQuestionChange}>
+              <Select native labelId="security-question-label" id="securityQuestionId" value={securityData.securityQuestionId} label="Security Question" onChange={(e) => setSecurityData((prev) => ({ ...prev, securityQuestionId: Number(e.target.value) }))}>
+                <option value={0} disabled>
+                  Select a security question
+                </option>
                 {securityQuestions.map((question) => (
-                  <MenuItem key={question.id} value={question.id}>
+                  <option key={question.id} value={question.id}>
                     {question.question}
-                  </MenuItem>
+                  </option>
                 ))}
               </Select>
               <FormHelperText>Choose a security question you can easily remember</FormHelperText>
@@ -483,11 +482,14 @@ const AccountSettings: React.FC = () => {
 
             <FormControl fullWidth margin="normal" disabled={deleteLoading || loadingQuestions}>
               <InputLabel id="delete-security-question-label">Security Question</InputLabel>
-              <Select labelId="delete-security-question-label" id="delete-security-question" value={currentSecurityQuestionId} label="Security Question" disabled>
+              <Select native labelId="delete-security-question-label" id="delete-security-question" value={currentSecurityQuestionId} label="Security Question" disabled>
+                <option value={0} disabled>
+                  Select a security question
+                </option>
                 {securityQuestions.map((question) => (
-                  <MenuItem key={question.id} value={question.id}>
+                  <option key={question.id} value={question.id}>
                     {question.question}
-                  </MenuItem>
+                  </option>
                 ))}
               </Select>
               <FormHelperText>Your current security question</FormHelperText>

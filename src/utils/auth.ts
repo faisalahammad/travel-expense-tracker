@@ -1,5 +1,5 @@
 import CryptoJS from "crypto-js";
-import { LoginCredentials, ResetPinData, Tour } from "../types";
+import { LoginCredentials, LoginResult, ResetPinData } from "../types";
 import { supabase } from "./supabase";
 
 // Constants
@@ -7,9 +7,6 @@ const MAX_LOGIN_ATTEMPTS = 3;
 const LOCKOUT_DURATION_MS = 60 * 60 * 1000; // 1 hour in milliseconds
 const ATTEMPT_WINDOW_MS = 10 * 60 * 1000; // 10 minutes in milliseconds
 
-/**
- * Hash a pin using SHA-256
- */
 export const hashPin = (pin: string): string => {
   return CryptoJS.SHA256(pin).toString();
 };
@@ -103,163 +100,109 @@ export const getRemainingLockoutTime = async (email: string): Promise<number> =>
 /**
  * Login a user with email and pin
  */
-export const login = async (credentials: LoginCredentials): Promise<{ success: boolean; tour?: Tour; message?: string }> => {
+export const login = async (credentials: LoginCredentials): Promise<LoginResult> => {
   try {
-    const { email, pin } = credentials;
+    // Get user by email
+    const { data: user, error: userError } = await supabase.from("users").select("*").eq("email", credentials.email).single();
 
-    // Check if user is locked out
-    const lockedOut = await isUserLockedOut(email);
-    if (lockedOut) {
-      const remainingTime = await getRemainingLockoutTime(email);
-      const remainingMinutes = Math.ceil(remainingTime / (60 * 1000));
-      return {
-        success: false,
-        message: `Too many failed login attempts. Please try again in ${remainingMinutes} minutes.`,
-      };
+    if (userError || !user) {
+      return { success: false, message: "Invalid email or PIN" };
     }
 
-    // Get the user by email
-    const { data: userData, error: userError } = await supabase.from("users").select("*").eq("email", email).single();
-
-    if (userError || !userData) {
-      await recordLoginAttempt(email, false);
-      return { success: false, message: "Invalid email or PIN." };
+    // Verify PIN
+    const pinHash = hashPin(credentials.pin);
+    if (pinHash !== user.pin_hash) {
+      return { success: false, message: "Invalid email or PIN" };
     }
 
-    // Verify the pin
-    const pinHash = userData.pin_hash;
-    if (!verifyPin(pin, pinHash)) {
-      await recordLoginAttempt(email, false);
-      return { success: false, message: "Invalid email or PIN." };
-    }
-
-    // Record successful login
-    await recordLoginAttempt(email, true);
-
-    // Get the user's tours
-    const { data: toursData, error: toursError } = await supabase.from("tours").select("*").eq("user_id", userData.id);
-
-    if (toursError) {
-      console.error("Error fetching user's tours:", toursError);
-      // Continue with login even if we can't fetch tours
-    }
-
-    // Use the first tour or create a placeholder
-    const tour =
-      toursData && toursData.length > 0
-        ? toursData[0]
-        : {
-            id: userData.id, // Use user ID as a placeholder
-            name: "My Tour",
-            base_currency_code: "USD",
-            email: userData.email,
-            security_question_id: userData.security_question_id,
-            security_answer: userData.security_answer,
-            pin_hash: userData.pin_hash,
-            user_id: userData.id,
-            created_at: userData.created_at,
-            updated_at: userData.updated_at,
-          };
-
-    // Return the tour
     return {
       success: true,
-      tour: {
-        id: tour.id,
-        name: tour.name,
-        baseCurrencyCode: tour.base_currency_code,
-        email: tour.email,
-        securityQuestionId: tour.security_question_id,
-        securityAnswer: tour.security_answer,
-        pinHash: tour.pin_hash,
-        userId: tour.user_id,
-        travelers: [],
-        currencies: [],
-        expenses: [],
-        payments: [],
-        planningTasks: [],
-        createdAt: tour.created_at,
-        updatedAt: tour.updated_at,
-      },
+      message: "Login successful",
+      userId: user.id,
     };
   } catch (error) {
-    console.error("Error logging in:", error);
-    return { success: false, message: "An error occurred during login." };
+    console.error("Error during login:", error);
+    return { success: false, message: "An unexpected error occurred" };
   }
 };
 
 /**
  * Reset a user's PIN using security question
  */
-export const resetPin = async (resetData: ResetPinData): Promise<{ success: boolean; message: string }> => {
+export const resetPin = async (resetData: ResetPinData): Promise<LoginResult> => {
   try {
     const { email, securityQuestionId, securityAnswer, newPin } = resetData;
 
-    // Get the user by email
-    const { data, error } = await supabase.from("users").select("*").eq("email", email).single();
+    // Get user by email
+    const { data: user, error: userError } = await supabase.from("users").select("*").eq("email", email).single();
 
-    if (error || !data) {
-      return { success: false, message: "Email not found." };
+    if (userError || !user) {
+      return { success: false, message: "Email not found" };
     }
 
     // Verify security question and answer
-    if (data.security_question_id !== securityQuestionId || data.security_answer.toLowerCase() !== securityAnswer.toLowerCase()) {
-      return { success: false, message: "Security answer is incorrect." };
+    if (user.security_question_id !== securityQuestionId) {
+      return { success: false, message: "Security question is incorrect" };
     }
 
-    // Update the pin
+    // Verify security answer - handle both hashed and plain text versions
+    const securityAnswerHash = hashPin(securityAnswer);
+    let answerIsCorrect = false;
+
+    // Check hashed version if it exists
+    if (user.security_answer_hash) {
+      answerIsCorrect = securityAnswerHash === user.security_answer_hash;
+    }
+    // Check plain text version if it exists
+    else if (user.security_answer) {
+      answerIsCorrect = securityAnswer === user.security_answer;
+    }
+
+    if (!answerIsCorrect) {
+      return { success: false, message: "Security answer is incorrect" };
+    }
+
+    // Validate and hash new PIN
+    if (!isValidPin(newPin)) {
+      return { success: false, message: "Invalid PIN format" };
+    }
     const newPinHash = hashPin(newPin);
-    const { error: updateError } = await supabase.from("users").update({ pin_hash: newPinHash }).eq("id", data.id);
+
+    // Update user's PIN
+    const { error: updateError } = await supabase.from("users").update({ pin_hash: newPinHash }).eq("id", user.id);
 
     if (updateError) {
-      return { success: false, message: "Failed to update PIN." };
+      console.error("Error updating PIN:", updateError);
+      return { success: false, message: "Failed to update PIN" };
     }
 
-    // Also update any tours associated with this user
-    const { error: updateToursError } = await supabase.from("tours").update({ pin_hash: newPinHash }).eq("user_id", data.id);
-
-    if (updateToursError) {
-      console.error("Error updating tours PIN:", updateToursError);
-      // We don't return an error here as the user PIN was successfully updated
-    }
-
-    return { success: true, message: "PIN has been reset successfully." };
+    return {
+      success: true,
+      message: "PIN reset successfully",
+      userId: user.id,
+    };
   } catch (error) {
     console.error("Error resetting PIN:", error);
-    return { success: false, message: "An error occurred while resetting PIN." };
+    return { success: false, message: "An unexpected error occurred" };
   }
 };
 
 /**
  * Get all security questions
  */
-export const getSecurityQuestions = async (): Promise<{ id: number; question: string }[]> => {
+export const getSecurityQuestions = async () => {
   try {
-    const { data, error } = await supabase.from("security_questions").select("*");
+    const { data, error } = await supabase.from("security_questions").select("*").order("id");
 
-    if (error || !data || data.length === 0) {
-      console.error("Error fetching security questions or no questions found:", error);
-      // Fallback to predefined security questions
-      return [
-        { id: 1, question: "What was the name of your first pet?" },
-        { id: 2, question: "In which city were you born?" },
-        { id: 3, question: "What was your childhood nickname?" },
-        { id: 4, question: "What is the name of your favorite childhood teacher?" },
-        { id: 5, question: "What is your mother's maiden name?" },
-      ];
+    if (error) {
+      console.error("Error fetching security questions:", error);
+      return [];
     }
 
-    return data.map((q) => ({ id: q.id, question: q.question }));
+    return data || [];
   } catch (error) {
     console.error("Error fetching security questions:", error);
-    // Fallback to predefined security questions
-    return [
-      { id: 1, question: "What was the name of your first pet?" },
-      { id: 2, question: "In which city were you born?" },
-      { id: 3, question: "What was your childhood nickname?" },
-      { id: 4, question: "What is the name of your favorite childhood teacher?" },
-      { id: 5, question: "What is your mother's maiden name?" },
-    ];
+    return [];
   }
 };
 
@@ -318,39 +261,47 @@ export const isEmailRegisteredInUsers = async (email: string): Promise<boolean> 
 };
 
 /**
- * Create a new user
+ * Create a new user account
  */
-export const createUser = async (email: string, pin: string, securityQuestionId: number, securityAnswer: string): Promise<{ success: boolean; userId?: string; message?: string }> => {
+export const createUser = async (email: string, pin: string, securityQuestionId: number, securityAnswer: string): Promise<LoginResult> => {
   try {
     // Check if email is already registered
     const emailExists = await isEmailRegisteredInUsers(email);
     if (emailExists) {
-      return { success: false, message: "This email is already registered." };
+      return { success: false, message: "This email is already registered" };
     }
 
     // Hash the PIN
     const pinHash = hashPin(pin);
 
-    // Insert the new user
-    const { data, error } = await supabase
+    // Create user with just the essential fields
+    const { data: userData, error: userError } = await supabase
       .from("users")
       .insert({
         email,
         pin_hash: pinHash,
         security_question_id: securityQuestionId,
-        security_answer: securityAnswer,
+        security_answer: securityAnswer, // Use plain text answer
       })
-      .select("id")
-      .single();
+      .select("id");
 
-    if (error) {
-      console.error("Error creating user:", error);
-      return { success: false, message: "Failed to create user." };
+    if (userError) {
+      console.error("Error creating user:", userError);
+      return { success: false, message: "Failed to create user account" };
     }
 
-    return { success: true, userId: data.id };
+    if (!userData || userData.length === 0) {
+      console.error("No user data returned after creation");
+      return { success: false, message: "Failed to create user account" };
+    }
+
+    return {
+      success: true,
+      message: "Account created successfully",
+      userId: userData[0].id,
+    };
   } catch (error) {
     console.error("Error creating user:", error);
-    return { success: false, message: "An error occurred while creating user." };
+    return { success: false, message: "An unexpected error occurred" };
   }
 };

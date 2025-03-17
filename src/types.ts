@@ -169,3 +169,9 @@ export const DEFAULT_EXPENSE_CATEGORIES: ExpenseCategory[] = [
     color: "#607D8B",
   },
 ];
+
+export interface LoginResult {
+  success: boolean;
+  message?: string;
+  userId?: string;
+}

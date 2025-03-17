@@ -145,6 +145,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   ): Promise<Tour | null> => {
     try {
+      // If this is being called from user registration, don't create a tour
+      if (authData && !name && !baseCurrencyCode) {
+        return null;
+      }
+
       const tourId = uuidv4();
       const now = new Date().toISOString();
 

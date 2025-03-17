@@ -97,6 +97,8 @@ const AppRoutes: React.FC = () => {
       <Routes>
         {/* Public routes */}
         <Route path="/auth" element={<Auth />} />
+        <Route path="/register" element={<Auth />} />
+        <Route path="/reset-pin" element={<Auth />} />
 
         {/* Protected routes */}
         <Route element={<ProtectedRoute redirectPath="/auth" />}>

@@ -1,18 +1,19 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { AuthState, ChangePinData, ChangeSecurityQuestionData, DeleteAccountData, LoginCredentials, ResetPinData } from "../types";
-import { getSecurityQuestions, hashPin, isEmailRegistered, isValidEmail, isValidPin, login, resetPin, verifyPin } from "../utils/auth";
+import { AuthState, ChangePinData, ChangeSecurityQuestionData, DeleteAccountData, LoginResult, ResetPinData } from "../types";
+import { login as authLogin, getSecurityQuestions, hashPin, isEmailRegistered, isValidEmail, isValidPin, resetPin, verifyPin } from "../utils/auth";
 import { supabase } from "../utils/supabase";
 
 interface AuthContextType {
   authState: AuthState;
-  login: (credentials: LoginCredentials) => Promise<{ success: boolean; message?: string }>;
+  isAuthenticated: boolean;
+  login: (credentials: { email: string; pin: string }) => Promise<LoginResult>;
   logout: () => void;
-  resetPin: (resetData: ResetPinData) => Promise<{ success: boolean; message: string }>;
+  resetPin: (resetData: ResetPinData) => Promise<LoginResult>;
   changePin: (changePinData: ChangePinData) => Promise<{ success: boolean; message: string }>;
   changeSecurityQuestion: (changeData: ChangeSecurityQuestionData) => Promise<{ success: boolean; message: string }>;
   deleteAccount: (deleteData: DeleteAccountData) => Promise<{ success: boolean; message: string }>;
   isEmailRegistered: (email: string) => Promise<boolean>;
-  getSecurityQuestions: () => Promise<{ id: number; question: string }[]>;
+  getSecurityQuestions: () => Promise<any[]>;
   isValidPin: (pin: string) => boolean;
   isValidEmail: (email: string) => boolean;
 }
@@ -28,43 +29,49 @@ const initialAuthState: AuthState = {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [authState, setAuthState] = useState<AuthState>(() => {
-    // Try to load auth state from localStorage
+  const [authState, setAuthState] = useState<AuthState>({
+    isAuthenticated: false,
+    currentTourId: null,
+    email: null,
+    lastLoginTime: null,
+    userId: null,
+  });
+
+  useEffect(() => {
+    // Load auth state from localStorage on mount
     const savedAuthState = localStorage.getItem("authState");
     if (savedAuthState) {
       try {
-        return JSON.parse(savedAuthState);
+        const parsedState = JSON.parse(savedAuthState);
+        setAuthState(parsedState);
       } catch (error) {
         console.error("Error parsing saved auth state:", error);
+        localStorage.removeItem("authState");
       }
     }
-    return initialAuthState;
-  });
+  }, []);
 
-  // Save auth state to localStorage whenever it changes
   useEffect(() => {
+    // Save auth state to localStorage whenever it changes
     localStorage.setItem("authState", JSON.stringify(authState));
   }, [authState]);
 
-  // Handle login
-  const handleLogin = async (credentials: LoginCredentials): Promise<{ success: boolean; message?: string }> => {
+  const login = async (credentials: { email: string; pin: string }): Promise<LoginResult> => {
     try {
-      const result = await login(credentials);
-
-      if (result.success && result.tour) {
-        setAuthState({
+      const result = await authLogin(credentials);
+      if (result.success) {
+        setAuthState((prev) => ({
+          ...prev,
           isAuthenticated: true,
-          currentTourId: result.tour.id,
           email: credentials.email,
-          userId: result.tour.userId || null,
           lastLoginTime: new Date().toISOString(),
-        });
+          userId: result.userId,
+        }));
       }
-
       return result;
     } catch (error) {
-      console.error("Error during login:", error);
-      return { success: false, message: "An unexpected error occurred during login." };
+      console.error("Login error:", error);
+      return { success: false, message: "An unexpected error occurred" };
     }
   };
 
@@ -74,8 +81,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // Handle PIN reset
-  const handleResetPin = async (resetData: ResetPinData): Promise<{ success: boolean; message: string }> => {
-    return await resetPin(resetData);
+  const handleResetPin = async (resetData: ResetPinData): Promise<LoginResult> => {
+    try {
+      return await resetPin(resetData);
+    } catch (error) {
+      console.error("Error resetting PIN:", error);
+      return { success: false, message: "An unexpected error occurred" };
+    }
   };
 
   // Handle PIN change
@@ -205,7 +217,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const contextValue: AuthContextType = {
     authState,
-    login: handleLogin,
+    isAuthenticated: authState.isAuthenticated,
+    login,
     logout: handleLogout,
     resetPin: handleResetPin,
     changePin: handleChangePin,
@@ -220,10 +233,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   return <AuthContext.Provider value={contextValue}>{children}</AuthContext.Provider>;
 };
 
-export const useAuth = (): AuthContextType => {
+export const useAuth = () => {
   const context = useContext(AuthContext);
   if (context === undefined) {
     throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
 };
+
+export default AuthContext;

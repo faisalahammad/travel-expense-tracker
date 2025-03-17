@@ -303,80 +303,51 @@ export const loadAppState = async (initialState: AppState): Promise<AppState> =>
 
 // Save a tour to Supabase
 export const saveTour = async (tour: Tour): Promise<void> => {
+  if (!tour || !tour.id) {
+    console.error("Invalid tour data");
+    return;
+  }
+
   try {
-    // First, check if the tour exists
-    const { data: existingTour, error: checkError } = await supabase.from("tours").select("id").eq("id", tour.id).maybeSingle();
-
-    if (checkError && checkError.code !== "PGRST116") {
-      console.error("Error checking tour existence:", checkError);
-      return;
-    }
-
-    // Prepare tour data for Supabase
-    const tourData = {
+    // Update tour in database
+    const { error } = await supabase.from("tours").upsert({
       id: tour.id,
       name: tour.name,
       base_currency_code: tour.baseCurrencyCode,
+      email: tour.email || null,
+      security_question_id: tour.securityQuestionId || null,
+      security_answer: tour.securityAnswer || null,
+      pin_hash: tour.pinHash || null,
+      user_id: tour.userId || null,
       created_at: tour.createdAt,
-      updated_at: new Date().toISOString(),
-    };
+      updated_at: tour.updatedAt || new Date().toISOString(),
+    });
 
-    if (existingTour) {
-      // Update existing tour
-      const { error: updateError } = await supabase.from("tours").update(tourData).eq("id", tour.id);
-
-      if (updateError) {
-        console.error("Error updating tour:", updateError);
-        return;
-      }
-    } else {
-      // Insert new tour
-      const { error: insertError } = await supabase.from("tours").insert(tourData);
-
-      if (insertError) {
-        console.error("Error inserting tour:", insertError);
-        return;
-      }
+    if (error) {
+      console.error("Error saving tour:", error);
+      return;
     }
 
     // Handle travelers
     if (tour.travelers && tour.travelers.length > 0) {
       try {
-        // Get existing travelers
-        const { data: existingTravelers, error: travelersError } = await supabase.from("travelers").select("id").eq("tour_id", tour.id);
+        // First delete all travelers for this tour
+        const { error: deleteError } = await supabase.from("travelers").delete().eq("tour_id", tour.id);
 
-        if (travelersError) {
-          console.error("Error fetching existing travelers:", travelersError);
+        if (deleteError) {
+          console.error("Error deleting travelers:", deleteError);
         } else {
-          // Create a set of existing traveler IDs
-          const existingIds = new Set(existingTravelers?.map((t) => t.id) || []);
-
-          // Create a set of current traveler IDs
-          const currentIds = new Set(tour.travelers.map((t) => t.id));
-
-          // Find travelers to delete (in existing but not in current)
-          const idsToDelete = [...existingIds].filter((id) => !currentIds.has(id));
-
-          // Delete removed travelers
-          if (idsToDelete.length > 0) {
-            const { error: deleteError } = await supabase.from("travelers").delete().in("id", idsToDelete);
-            if (deleteError) {
-              console.error("Error deleting travelers:", deleteError);
-            }
-          }
-
-          // Upsert current travelers
-          const travelersToUpsert = tour.travelers.map((traveler) => ({
+          // Then insert all current travelers
+          const travelersToInsert = tour.travelers.map((traveler) => ({
             id: traveler.id,
             tour_id: tour.id,
             name: traveler.name,
           }));
 
-          if (travelersToUpsert.length > 0) {
-            const { error: upsertError } = await supabase.from("travelers").upsert(travelersToUpsert);
-            if (upsertError) {
-              console.error("Error upserting travelers:", upsertError);
-            }
+          const { error: insertError } = await supabase.from("travelers").insert(travelersToInsert);
+
+          if (insertError) {
+            console.error("Error inserting travelers:", insertError);
           }
         }
       } catch (error) {
@@ -393,18 +364,20 @@ export const saveTour = async (tour: Tour): Promise<void> => {
         if (deleteError) {
           console.error("Error deleting currencies:", deleteError);
         } else {
-          // Then insert all current currencies
-          const currenciesToInsert = tour.currencies.map((currency) => ({
+          // Then insert all current currencies using upsert to handle conflicts
+          const currenciesToUpsert = tour.currencies.map((currency) => ({
+            id: `${tour.id}_${currency.code}`, // Create a composite primary key
             tour_id: tour.id,
             code: currency.code,
             name: currency.name,
             exchange_rate: currency.exchangeRate,
           }));
 
-          const { error: insertError } = await supabase.from("currencies").insert(currenciesToInsert);
+          // Use upsert to handle any conflicts
+          const { error: upsertError } = await supabase.from("currencies").upsert(currenciesToUpsert);
 
-          if (insertError) {
-            console.error("Error inserting currencies:", insertError);
+          if (upsertError) {
+            console.error("Error upserting currencies:", upsertError);
           }
         }
       } catch (error) {

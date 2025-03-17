@@ -3,19 +3,19 @@ import { Alert, Box, Button, Card, CardContent, CircularProgress, Divider, FormC
 import React, { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { SecurityQuestion } from "../types";
-import { resetPin } from "../utils/auth";
+import { createUser } from "../utils/auth";
 
-interface ResetPinFormProps {
+interface RegisterFormProps {
   onSuccess?: () => void;
   onCancel?: () => void;
 }
 
-const ResetPinForm: React.FC<ResetPinFormProps> = ({ onSuccess, onCancel }) => {
-  const { getSecurityQuestions, isValidPin } = useAuth();
+const RegisterForm: React.FC<RegisterFormProps> = ({ onSuccess, onCancel }) => {
+  const { isEmailRegistered, getSecurityQuestions, isValidPin, isValidEmail } = useAuth();
 
   // Form state
   const [email, setEmail] = useState("");
-  const [newPin, setNewPin] = useState("");
+  const [pin, setPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
   const [securityQuestionId, setSecurityQuestionId] = useState<number>(0);
   const [securityAnswer, setSecurityAnswer] = useState("");
@@ -68,25 +68,41 @@ const ResetPinForm: React.FC<ResetPinFormProps> = ({ onSuccess, onCancel }) => {
     setShowPin(!showPin);
   };
 
-  const validateForm = (): boolean => {
+  const handleSecurityQuestionChange = (event: React.ChangeEvent<{ value: unknown }>) => {
+    setSecurityQuestionId(event.target.value as number);
+  };
+
+  const validateForm = async (): Promise<boolean> => {
     // Validate email
     if (!email.trim()) {
       setError("Email is required");
       return false;
     }
 
+    if (!isValidEmail(email)) {
+      setError("Please enter a valid email address");
+      return false;
+    }
+
+    // Check if email is already registered
+    const emailExists = await isEmailRegistered(email);
+    if (emailExists) {
+      setError("This email is already registered. Please use a different email or reset your PIN.");
+      return false;
+    }
+
     // Validate PIN
-    if (!newPin.trim()) {
+    if (!pin.trim()) {
       setError("PIN is required");
       return false;
     }
 
-    if (!isValidPin(newPin)) {
+    if (!isValidPin(pin)) {
       setError("PIN must be 4-6 alphanumeric characters");
       return false;
     }
 
-    if (newPin !== confirmPin) {
+    if (pin !== confirmPin) {
       setError("PINs do not match");
       return false;
     }
@@ -111,30 +127,28 @@ const ResetPinForm: React.FC<ResetPinFormProps> = ({ onSuccess, onCancel }) => {
     setError(null);
     setSuccess(null);
 
-    if (!validateForm()) {
-      return;
-    }
-
     setLoading(true);
 
     try {
-      const result = await resetPin({
-        email,
-        securityQuestionId,
-        securityAnswer,
-        newPin,
-      });
-
-      if (!result.success) {
-        setError(result.message || "Failed to reset PIN. Please check your information and try again.");
+      const isValid = await validateForm();
+      if (!isValid) {
+        setLoading(false);
         return;
       }
 
-      setSuccess("PIN reset successfully! You can now log in with your new PIN.");
+      // Create user account without creating a tour
+      const userResult = await createUser(email, pin, securityQuestionId, securityAnswer);
+
+      if (!userResult.success) {
+        setError(userResult.message || "Failed to create user account.");
+        return;
+      }
+
+      setSuccess("Account created successfully! You can now log in.");
 
       // Reset form
       setEmail("");
-      setNewPin("");
+      setPin("");
       setConfirmPin("");
       setSecurityAnswer("");
 
@@ -143,7 +157,7 @@ const ResetPinForm: React.FC<ResetPinFormProps> = ({ onSuccess, onCancel }) => {
         if (onSuccess) onSuccess();
       }, 2000);
     } catch (error) {
-      console.error("Error resetting PIN:", error);
+      console.error("Error creating account:", error);
       setError("An unexpected error occurred. Please try again.");
     } finally {
       setLoading(false);
@@ -154,7 +168,7 @@ const ResetPinForm: React.FC<ResetPinFormProps> = ({ onSuccess, onCancel }) => {
     <Card elevation={3} sx={{ maxWidth: 600, mx: "auto", mt: 4 }}>
       <CardContent sx={{ p: 4 }}>
         <Typography variant="h5" component="h2" gutterBottom align="center">
-          Reset PIN
+          Create Account
         </Typography>
 
         <Divider sx={{ mb: 3 }} />
@@ -172,36 +186,23 @@ const ResetPinForm: React.FC<ResetPinFormProps> = ({ onSuccess, onCancel }) => {
         )}
 
         <Box component="form" onSubmit={handleSubmit} noValidate>
-          <TextField margin="normal" required fullWidth id="email" label="Email Address" name="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} disabled={loading} />
+          <Typography variant="h6" gutterBottom>
+            Account Information
+          </Typography>
 
-          <FormControl fullWidth margin="normal" disabled={loading || loadingQuestions}>
-            <InputLabel id="security-question-label">Security Question</InputLabel>
-            <Select native labelId="security-question-label" id="securityQuestionId" value={securityQuestionId} onChange={(e) => setSecurityQuestionId(Number(e.target.value))} label="Security Question">
-              <option value={0} disabled>
-                Select a security question
-              </option>
-              {securityQuestions.map((question) => (
-                <option key={question.id} value={question.id}>
-                  {question.question}
-                </option>
-              ))}
-            </Select>
-            <FormHelperText>Select the security question you answered when creating your account</FormHelperText>
-          </FormControl>
-
-          <TextField margin="normal" required fullWidth id="securityAnswer" label="Security Answer" name="securityAnswer" value={securityAnswer} onChange={(e) => setSecurityAnswer(e.target.value)} disabled={loading} />
+          <TextField margin="normal" required fullWidth id="email" label="Email Address" name="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} disabled={loading} helperText="You'll use this email to log in to your account" />
 
           <TextField
             margin="normal"
             required
             fullWidth
-            name="newPin"
-            label="New PIN"
+            name="pin"
+            label="PIN"
             type={showPin ? "text" : "password"}
-            id="newPin"
+            id="pin"
             autoComplete="new-password"
-            value={newPin}
-            onChange={(e) => setNewPin(e.target.value)}
+            value={pin}
+            onChange={(e) => setPin(e.target.value)}
             disabled={loading}
             InputProps={{
               endAdornment: (
@@ -220,16 +221,37 @@ const ResetPinForm: React.FC<ResetPinFormProps> = ({ onSuccess, onCancel }) => {
             required
             fullWidth
             name="confirmPin"
-            label="Confirm New PIN"
+            label="Confirm PIN"
             type={showPin ? "text" : "password"}
             id="confirmPin"
             autoComplete="new-password"
             value={confirmPin}
             onChange={(e) => setConfirmPin(e.target.value)}
             disabled={loading}
-            error={confirmPin !== newPin && confirmPin !== ""}
-            helperText={confirmPin !== newPin && confirmPin !== "" ? "PINs do not match" : ""}
+            error={confirmPin !== pin && confirmPin !== ""}
+            helperText={confirmPin !== pin && confirmPin !== "" ? "PINs do not match" : ""}
           />
+
+          <Typography variant="h6" gutterBottom sx={{ mt: 4 }}>
+            Security Information
+          </Typography>
+
+          <FormControl fullWidth margin="normal" disabled={loading || loadingQuestions}>
+            <InputLabel id="security-question-label">Security Question</InputLabel>
+            <Select native labelId="security-question-label" id="securityQuestionId" value={securityQuestionId} onChange={(e) => setSecurityQuestionId(Number(e.target.value))} label="Security Question">
+              <option value={0} disabled>
+                Select a security question
+              </option>
+              {securityQuestions.map((question) => (
+                <option key={question.id} value={question.id}>
+                  {question.question}
+                </option>
+              ))}
+            </Select>
+            <FormHelperText>This will be used to reset your PIN if you forget it</FormHelperText>
+          </FormControl>
+
+          <TextField margin="normal" required fullWidth id="securityAnswer" label="Security Answer" name="securityAnswer" value={securityAnswer} onChange={(e) => setSecurityAnswer(e.target.value)} disabled={loading} helperText="Remember this answer exactly as you type it" />
 
           <Box sx={{ display: "flex", justifyContent: "space-between", mt: 4 }}>
             <Button variant="outlined" onClick={onCancel} disabled={loading}>
@@ -237,7 +259,7 @@ const ResetPinForm: React.FC<ResetPinFormProps> = ({ onSuccess, onCancel }) => {
             </Button>
 
             <Button type="submit" variant="contained" color="primary" disabled={loading}>
-              {loading ? <CircularProgress size={24} /> : "Reset PIN"}
+              {loading ? <CircularProgress size={24} /> : "Create Account"}
             </Button>
           </Box>
         </Box>
@@ -246,4 +268,4 @@ const ResetPinForm: React.FC<ResetPinFormProps> = ({ onSuccess, onCancel }) => {
   );
 };
 
-export default ResetPinForm;
+export default RegisterForm;
