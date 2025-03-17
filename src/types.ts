@@ -174,4 +174,5 @@ export interface LoginResult {
   success: boolean;
   message?: string;
   userId?: string;
+  tourId?: string;
 }

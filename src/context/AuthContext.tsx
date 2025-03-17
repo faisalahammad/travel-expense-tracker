@@ -3,6 +3,9 @@ import { AuthState, ChangePinData, ChangeSecurityQuestionData, DeleteAccountData
 import { login as authLogin, getSecurityQuestions, hashPin, isEmailRegistered, isValidEmail, isValidPin, resetPin, verifyPin } from "../utils/auth";
 import { supabase } from "../utils/supabase";
 
+// Session expiration time in milliseconds (30 days)
+const SESSION_EXPIRATION_TIME = 30 * 24 * 60 * 60 * 1000;
+
 interface AuthContextType {
   authState: AuthState;
   isAuthenticated: boolean;
@@ -29,44 +32,77 @@ const initialAuthState: AuthState = {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [authState, setAuthState] = useState<AuthState>({
-    isAuthenticated: false,
-    currentTourId: null,
-    email: null,
-    lastLoginTime: null,
-    userId: null,
-  });
+  const [authState, setAuthState] = useState<AuthState>(initialAuthState);
+  const [isInitialized, setIsInitialized] = useState(false);
+
+  // Check if the session is expired
+  const isSessionExpired = (lastLoginTime: string): boolean => {
+    if (!lastLoginTime) return true;
+
+    const loginTime = new Date(lastLoginTime).getTime();
+    const currentTime = new Date().getTime();
+    return currentTime - loginTime > SESSION_EXPIRATION_TIME;
+  };
 
   useEffect(() => {
     // Load auth state from localStorage on mount
-    const savedAuthState = localStorage.getItem("authState");
-    if (savedAuthState) {
-      try {
-        const parsedState = JSON.parse(savedAuthState);
-        setAuthState(parsedState);
-      } catch (error) {
-        console.error("Error parsing saved auth state:", error);
-        localStorage.removeItem("authState");
+    const loadAuthState = () => {
+      const savedAuthState = localStorage.getItem("authState");
+      if (savedAuthState) {
+        try {
+          const parsedState = JSON.parse(savedAuthState) as AuthState;
+
+          // Check if the session is expired
+          if (parsedState.lastLoginTime && !isSessionExpired(parsedState.lastLoginTime)) {
+            setAuthState(parsedState);
+          } else {
+            // Session expired, clear localStorage
+            localStorage.removeItem("authState");
+            setAuthState(initialAuthState);
+          }
+        } catch (error) {
+          console.error("Error parsing saved auth state:", error);
+          localStorage.removeItem("authState");
+        }
       }
-    }
+      setIsInitialized(true);
+    };
+
+    loadAuthState();
   }, []);
 
   useEffect(() => {
     // Save auth state to localStorage whenever it changes
-    localStorage.setItem("authState", JSON.stringify(authState));
-  }, [authState]);
+    if (isInitialized) {
+      if (authState.isAuthenticated) {
+        localStorage.setItem("authState", JSON.stringify(authState));
+      } else {
+        localStorage.removeItem("authState");
+      }
+    }
+  }, [authState, isInitialized]);
 
   const login = async (credentials: { email: string; pin: string }): Promise<LoginResult> => {
     try {
       const result = await authLogin(credentials);
       if (result.success) {
-        setAuthState((prev) => ({
-          ...prev,
+        // Get the user's current tour ID
+        const { data: userData, error: userError } = await supabase.from("users").select("id").eq("email", credentials.email).single();
+
+        if (userError) {
+          console.error("Error fetching user data:", userError);
+        }
+
+        const newAuthState: AuthState = {
           isAuthenticated: true,
           email: credentials.email,
           lastLoginTime: new Date().toISOString(),
           userId: result.userId,
-        }));
+          currentTourId: result.tourId || null,
+        };
+
+        setAuthState(newAuthState);
+        localStorage.setItem("authState", JSON.stringify(newAuthState));
       }
       return result;
     } catch (error) {
@@ -78,6 +114,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Handle logout
   const handleLogout = () => {
     setAuthState(initialAuthState);
+    localStorage.removeItem("authState");
   };
 
   // Handle PIN reset

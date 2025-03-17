@@ -115,10 +115,16 @@ export const login = async (credentials: LoginCredentials): Promise<LoginResult>
       return { success: false, message: "Invalid email or PIN" };
     }
 
+    // Get the user's most recent tour
+    const { data: tourData, error: tourError } = await supabase.from("tours").select("id").eq("user_id", user.id).order("updated_at", { ascending: false }).limit(1).single();
+
+    const tourId = tourError ? null : tourData?.id;
+
     return {
       success: true,
       message: "Login successful",
       userId: user.id,
+      tourId: tourId,
     };
   } catch (error) {
     console.error("Error during login:", error);
