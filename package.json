@@ -20,6 +20,8 @@
     "@mui/material": "^6.4.6",
     "@mui/x-date-pickers": "^7.27.1",
     "@supabase/supabase-js": "^2.49.1",
+    "@types/crypto-js": "^4.2.2",
+    "crypto-js": "^4.2.0",
     "date-fns": "^2.30.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

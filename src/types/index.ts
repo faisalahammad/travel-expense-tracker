@@ -81,6 +81,11 @@ export interface Tour {
   id: string;
   name: string;
   baseCurrencyCode: string;
+  email?: string;
+  securityQuestionId?: number;
+  securityAnswer?: string;
+  pinHash?: string;
+  userId?: string;
   travelers: Traveler[];
   currencies: Currency[];
   expenses: Expense[];

@@ -1,9 +1,10 @@
-import { Assignment as AssignmentIcon, ExploreOutlined as ExploreIcon, ReceiptLongOutlined as ReceiptLongIcon, SwapHorizOutlined as SwapHorizIcon } from "@mui/icons-material";
+import { AccountCircle, Assignment as AssignmentIcon, ExploreOutlined as ExploreIcon, Logout as LogoutIcon, ReceiptLongOutlined as ReceiptLongIcon, SwapHorizOutlined as SwapHorizIcon } from "@mui/icons-material";
 import MenuIcon from "@mui/icons-material/Menu";
-import { AppBar, Box, Button, Container, CssBaseline, Divider, Drawer, FormControl, IconButton, List, ListItem, ListItemButton, ListItemIcon, ListItemText, MenuItem, Select, SelectChangeEvent, Toolbar, Typography, useMediaQuery, useTheme } from "@mui/material";
-import React, { useState } from "react";
+import { AppBar, Box, Button, Container, CssBaseline, Divider, Drawer, FormControl, IconButton, List, ListItem, ListItemButton, ListItemIcon, ListItemText, MenuItem, Select, SelectChangeEvent, Toolbar, Tooltip, Typography, useMediaQuery, useTheme } from "@mui/material";
+import React, { useMemo, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAppContext } from "../context/AppContext";
+import { useAuth } from "../context/AuthContext";
 import PWAInstallPrompt from "./PWAInstallPrompt";
 
 const drawerWidth = 240;
@@ -15,7 +16,25 @@ const Layout: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { state, setActiveTour } = useAppContext();
+  const { authState, logout } = useAuth();
   const { tours, activeTourId } = state;
+
+  // Filter tours to only show the ones created by the current user
+  const userTours = useMemo(() => {
+    return tours.filter((tour) => tour.email === authState.email);
+  }, [tours, authState.email]);
+
+  // If the active tour doesn't belong to the current user, reset it
+  useMemo(() => {
+    if (activeTourId) {
+      const activeTourBelongsToUser = userTours.some((tour) => tour.id === activeTourId);
+      if (!activeTourBelongsToUser) {
+        // Reset to the first user tour or null if no user tours
+        const newActiveTourId = userTours.length > 0 ? userTours[0].id : null;
+        setActiveTour(newActiveTourId);
+      }
+    }
+  }, [activeTourId, userTours, setActiveTour]);
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
@@ -26,7 +45,12 @@ const Layout: React.FC = () => {
     setActiveTour(tourId);
   };
 
-  const activeTour = tours.find((tour) => tour.id === activeTourId);
+  const handleLogout = () => {
+    logout();
+    navigate("/auth");
+  };
+
+  const activeTour = userTours.find((tour) => tour.id === activeTourId);
 
   // Define navigation items
   const navItems = [
@@ -54,7 +78,7 @@ const Layout: React.FC = () => {
       </Typography>
       <Divider />
 
-      {tours.length > 0 && (
+      {userTours.length > 0 && (
         <Box sx={{ p: 2 }}>
           <FormControl fullWidth>
             <Typography variant="subtitle2" sx={{ mb: 1, textAlign: "left" }}>
@@ -64,7 +88,7 @@ const Layout: React.FC = () => {
               <MenuItem value="" disabled>
                 Select a Tour
               </MenuItem>
-              {tours.map((tour) => (
+              {userTours.map((tour) => (
                 <MenuItem key={tour.id} value={tour.id}>
                   {tour.name}
                 </MenuItem>
@@ -97,6 +121,44 @@ const Layout: React.FC = () => {
             </ListItemButton>
           </ListItem>
         ))}
+
+        {/* Account Settings */}
+        <ListItem disablePadding>
+          <ListItemButton
+            component={Link}
+            to="/account"
+            selected={location.pathname === "/account"}
+            sx={{
+              textAlign: "left",
+              "&.Mui-selected": {
+                backgroundColor: "primary.light",
+                "&:hover": {
+                  backgroundColor: "primary.light",
+                },
+              },
+            }}
+          >
+            <ListItemIcon>
+              <AccountCircle />
+            </ListItemIcon>
+            <ListItemText primary="Account" />
+          </ListItemButton>
+        </ListItem>
+
+        {/* Logout */}
+        <ListItem disablePadding>
+          <ListItemButton
+            onClick={handleLogout}
+            sx={{
+              textAlign: "left",
+            }}
+          >
+            <ListItemIcon>
+              <LogoutIcon />
+            </ListItemIcon>
+            <ListItemText primary="Logout" />
+          </ListItemButton>
+        </ListItem>
       </List>
     </Box>
   );
@@ -125,7 +187,7 @@ const Layout: React.FC = () => {
             Travel Expense Tracker
           </Typography>
 
-          {tours.length > 0 && (
+          {userTours.length > 0 && (
             <FormControl sx={{ minWidth: 200, mr: 2, backgroundColor: "rgba(255, 255, 255, 0.15)", borderRadius: 0 }}>
               <Select
                 value={activeTourId || ""}
@@ -141,7 +203,7 @@ const Layout: React.FC = () => {
                 <MenuItem value="" disabled>
                   Select a Tour
                 </MenuItem>
-                {tours.map((tour) => (
+                {userTours.map((tour) => (
                   <MenuItem key={tour.id} value={tour.id}>
                     {tour.name}
                   </MenuItem>
@@ -172,6 +234,30 @@ const Layout: React.FC = () => {
                 {item.text}
               </Button>
             ))}
+
+            {/* Account Button */}
+            <Tooltip title="Account Settings">
+              <IconButton
+                component={Link}
+                to="/account"
+                color="inherit"
+                sx={{
+                  ml: 1,
+                  ...(location.pathname === "/account" && {
+                    backgroundColor: "rgba(255, 255, 255, 0.2)",
+                  }),
+                }}
+              >
+                <AccountCircle />
+              </IconButton>
+            </Tooltip>
+
+            {/* Logout Button */}
+            <Tooltip title="Logout">
+              <IconButton color="inherit" onClick={handleLogout} sx={{ ml: 1 }}>
+                <LogoutIcon />
+              </IconButton>
+            </Tooltip>
           </Box>
         </Toolbar>
       </AppBar>

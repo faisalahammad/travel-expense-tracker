@@ -45,14 +45,29 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
 });
 
 // Save app state to Supabase
-export const saveAppState = async (state: AppState) => {
+export const saveAppState = async (state: AppState): Promise<{ data: any; error: any }> => {
   try {
+    console.log("Saving app state to Supabase...");
+
+    // Filter out tours that don't have required fields for database
+    const validTours = state.tours.filter((tour) => (tour.email && tour.pinHash) || tour.userId);
+
+    if (validTours.length === 0) {
+      console.log("No valid tours to save to database (missing email/pinHash or userId)");
+      return { data: null, error: null };
+    }
+
     // First, save the basic tour information
     const { data: toursData, error: toursError } = await supabase.from("tours").upsert(
-      state.tours.map((tour) => ({
+      validTours.map((tour) => ({
         id: tour.id,
         name: tour.name,
         base_currency_code: tour.baseCurrencyCode,
+        email: tour.email,
+        security_question_id: tour.securityQuestionId || null,
+        security_answer: tour.securityAnswer || null,
+        pin_hash: tour.pinHash || null,
+        user_id: tour.userId || null,
         created_at: tour.createdAt,
         updated_at: tour.updatedAt,
       }))
@@ -61,7 +76,7 @@ export const saveAppState = async (state: AppState) => {
     if (toursError) throw toursError;
 
     // Save each tour's details separately
-    for (const tour of state.tours) {
+    for (const tour of validTours) {
       await saveTour(tour);
     }
 
@@ -183,57 +198,38 @@ export const loadAppState = async (initialState: AppState): Promise<AppState> =>
       try {
         // Load travelers for this tour
         const { data: travelers, error: travelersError } = await supabase.from("travelers").select("*").eq("tour_id", tourData.id);
-
-        if (travelersError) {
-          console.error(`Error loading travelers for tour ${tourData.id}:`, travelersError);
-          return null;
-        }
+        if (travelersError) throw travelersError;
 
         // Load currencies for this tour
         const { data: currencies, error: currenciesError } = await supabase.from("currencies").select("*").eq("tour_id", tourData.id);
-
-        if (currenciesError) {
-          console.error(`Error loading currencies for tour ${tourData.id}:`, currenciesError);
-          return null;
-        }
+        if (currenciesError) throw currenciesError;
 
         // Load expenses for this tour
         const { data: expenses, error: expensesError } = await supabase.from("expenses").select("*").eq("tour_id", tourData.id);
-
-        if (expensesError) {
-          console.error(`Error loading expenses for tour ${tourData.id}:`, expensesError);
-          return null;
-        }
+        if (expensesError) throw expensesError;
 
         // Load expense splits for each expense
         const expensesWithSplits = await Promise.all(
           expenses.map(async (expense: any) => {
             const { data: splits, error: splitsError } = await supabase.from("expense_splits").select("*").eq("expense_id", expense.id);
-
-            if (splitsError) {
-              console.error(`Error loading splits for expense ${expense.id}:`, splitsError);
-              return {
-                ...expense,
-                splits: [],
-              };
-            }
+            if (splitsError) throw splitsError;
 
             return {
               id: expense.id,
-              description: expense.description,
+              date: expense.date,
               amount: expense.amount,
               currencyCode: expense.currency_code,
               baseAmount: expense.base_amount,
               baseCurrencyCode: expense.base_currency_code,
-              date: expense.date,
+              description: expense.description,
               paidById: expense.paid_by_id,
-              categoryId: expense.category_id,
               splits: splits.map((split: any) => ({
                 travelerId: split.traveler_id,
                 amount: split.amount,
                 baseAmount: split.base_amount,
-                percentage: 0, // Calculate this if needed
+                percentage: 0, // Calculate this later
               })),
+              categoryId: expense.category_id,
               createdAt: expense.created_at,
             };
           })
@@ -241,20 +237,18 @@ export const loadAppState = async (initialState: AppState): Promise<AppState> =>
 
         // Load payments for this tour
         const { data: payments, error: paymentsError } = await supabase.from("payments").select("*").eq("tour_id", tourData.id);
+        if (paymentsError) throw paymentsError;
 
-        if (paymentsError) {
-          console.error(`Error loading payments for tour ${tourData.id}:`, paymentsError);
-          return null;
-        }
-
-        // Filter planning tasks for this tour
-        const tourPlanningTasks = planningTasks.filter((task) => task.tourId === tourData.id);
-
-        // Return the complete tour object
+        // Create the tour object
         return {
           id: tourData.id,
           name: tourData.name,
           baseCurrencyCode: tourData.base_currency_code,
+          email: tourData.email,
+          securityQuestionId: tourData.security_question_id,
+          securityAnswer: tourData.security_answer,
+          pinHash: tourData.pin_hash,
+          userId: tourData.user_id,
           travelers: travelers.map((traveler: any) => ({
             id: traveler.id,
             name: traveler.name,
@@ -264,7 +258,7 @@ export const loadAppState = async (initialState: AppState): Promise<AppState> =>
             name: currency.name,
             exchangeRate: currency.exchange_rate,
           })),
-          expenses: expensesWithSplits.filter(Boolean),
+          expenses: expensesWithSplits,
           payments: payments.map((payment: any) => ({
             id: payment.id,
             fromTravelerId: payment.from_traveler_id,
@@ -273,11 +267,9 @@ export const loadAppState = async (initialState: AppState): Promise<AppState> =>
             currencyCode: payment.currency_code,
             date: payment.date,
             description: payment.description || "",
-            method: payment.method,
-            notes: payment.notes,
             createdAt: payment.created_at,
           })),
-          planningTasks: tourPlanningTasks,
+          planningTasks: [],
           createdAt: tourData.created_at,
           updatedAt: tourData.updated_at,
         };

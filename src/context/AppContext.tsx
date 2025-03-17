@@ -13,7 +13,17 @@ interface ExtendedExpenseSplit {
 
 interface AppContextType {
   state: AppState;
-  createTour: (name: string, baseCurrencyCode: string) => Promise<Tour | null>;
+  createTour: (
+    name: string,
+    baseCurrencyCode: string,
+    authData?: {
+      email?: string;
+      securityQuestionId?: number;
+      securityAnswer?: string;
+      pinHash?: string;
+      userId?: string;
+    }
+  ) => Promise<Tour | null>;
   updateTour: (tourId: string, updates: Partial<Tour>) => void;
   deleteTour: (tourId: string) => void;
   setActiveTour: (tourId: string | null) => void;
@@ -123,7 +133,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [state, isInitialized]);
 
   // Create a new tour
-  const createTour = async (name: string, baseCurrencyCode: string): Promise<Tour | null> => {
+  const createTour = async (
+    name: string,
+    baseCurrencyCode: string,
+    authData?: {
+      email?: string;
+      securityQuestionId?: number;
+      securityAnswer?: string;
+      pinHash?: string;
+      userId?: string;
+    }
+  ): Promise<Tour | null> => {
     try {
       const tourId = uuidv4();
       const now = new Date().toISOString();
@@ -132,6 +152,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         id: tourId,
         name,
         baseCurrencyCode: baseCurrencyCode.toUpperCase(),
+        email: authData?.email,
+        securityQuestionId: authData?.securityQuestionId,
+        securityAnswer: authData?.securityAnswer,
+        pinHash: authData?.pinHash,
+        userId: authData?.userId,
         travelers: [],
         currencies: [
           {

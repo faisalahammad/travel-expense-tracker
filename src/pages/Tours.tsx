@@ -1,62 +1,49 @@
-import { Add as AddIcon, Check as CheckIcon, Close as CloseIcon, Delete as DeleteIcon, Edit as EditIcon, CheckCircle as SelectIcon } from "@mui/icons-material";
-import { Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Divider, Grid, IconButton, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography } from "@mui/material";
-import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { v4 as uuidv4 } from "uuid";
+import { Check as CheckIcon, Close as CloseIcon, Delete as DeleteIcon, Edit as EditIcon, CheckCircle as SelectIcon } from "@mui/icons-material";
+import { Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Divider, IconButton, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography } from "@mui/material";
+import React, { useMemo, useState } from "react";
+import { Navigate, useNavigate } from "react-router-dom";
+import CreateTourForm from "../components/CreateTourForm";
 import { useAppContext } from "../context/AppContext";
+import { useAuth } from "../context/AuthContext";
 
 const Tours: React.FC = () => {
-  const { state, createTour, updateTour, deleteTour, setActiveTour } = useAppContext();
+  const { authState } = useAuth();
+  const { state, updateTour, deleteTour, setActiveTour } = useAppContext();
   const { tours } = state;
   const navigate = useNavigate();
 
-  const [newTourName, setNewTourName] = useState("");
-  const [newTourCurrency, setNewTourCurrency] = useState("USD");
+  // Define state variables before the conditional return
   const [editingTourId, setEditingTourId] = useState<string | null>(null);
   const [editTourName, setEditTourName] = useState("");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [tourToDelete, setTourToDelete] = useState<string | null>(null);
+  const [showCreateForm, setShowCreateForm] = useState(false);
 
-  const handleFormSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (newTourName.trim() && newTourCurrency.trim()) {
-      await handleCreateTour(newTourName.trim(), newTourCurrency.trim());
-      setNewTourName("");
-      setNewTourCurrency("USD");
-    }
-  };
+  // If not authenticated, redirect to auth page
+  if (!authState.isAuthenticated) {
+    return <Navigate to="/auth" replace />;
+  }
 
-  const handleCreateTour = async (tourName: string, baseCurrencyCode: string) => {
-    try {
-      // Create the tour - createTour returns a Tour object or null
-      const newTour = await createTour(tourName, baseCurrencyCode);
-
-      if (!newTour) {
-        console.error("Failed to create tour");
-        return;
+  // Filter tours to only show the ones created by the current user
+  const userTours = useMemo(() => {
+    return tours.filter((tour) => {
+      // Check if the tour belongs to the current user by email or userId
+      if (tour.email === authState.email) {
+        return true;
       }
 
-      // Automatically add a default traveler
-      const travelerId = uuidv4();
-      const travelerName = "You";
+      // Also check if the tour has a userId that matches the user's ID from the database
+      // This handles the case where tours were created with a user_id but no email
+      if (tour.userId && authState.userId && tour.userId === authState.userId) {
+        return true;
+      }
 
-      // Update the tour with the new traveler
-      updateTour(newTour.id, {
-        travelers: [
-          ...newTour.travelers,
-          {
-            id: travelerId,
-            name: travelerName,
-          },
-        ],
-      });
-    } catch (error) {
-      console.error("Error creating tour:", error);
-    }
-  };
+      return false;
+    });
+  }, [tours, authState.email, authState.userId]);
 
   const handleEditTour = (tourId: string) => {
-    const tour = tours.find((t) => t.id === tourId);
+    const tour = userTours.find((t) => t.id === tourId);
     if (tour) {
       setEditingTourId(tourId);
       setEditTourName(tour.name);
@@ -99,111 +86,102 @@ const Tours: React.FC = () => {
     navigate("/");
   };
 
+  const handleCreateTourSuccess = () => {
+    setShowCreateForm(false);
+  };
+
   return (
     <>
       <Typography variant="h4" component="h1" gutterBottom>
         Manage Tours
       </Typography>
 
-      <Paper elevation={2} sx={{ p: 3, mb: 4 }}>
-        <Typography variant="h5" component="h2" gutterBottom>
-          Create New Tour
-        </Typography>
-        <Divider sx={{ mb: 3 }} />
-        <Box component="form" onSubmit={handleFormSubmit}>
-          <Grid container spacing={2} alignItems="center">
-            <Grid item xs={12} md={5}>
-              <TextField fullWidth label="Tour Name" value={newTourName} onChange={(e) => setNewTourName(e.target.value)} required variant="outlined" />
-            </Grid>
-            <Grid item xs={12} md={5}>
-              <TextField fullWidth label="Base Currency" value={newTourCurrency} onChange={(e) => setNewTourCurrency(e.target.value)} required variant="outlined" placeholder="3-letter code (e.g., USD)" inputProps={{ maxLength: 3, style: { textTransform: "uppercase" } }} />
-            </Grid>
-            <Grid item xs={12} md={2}>
-              <Button type="submit" variant="contained" color="primary" fullWidth startIcon={<AddIcon />} sx={{ height: "56px" }}>
-                CREATE TOUR
-              </Button>
-            </Grid>
-          </Grid>
-        </Box>
-      </Paper>
+      {!showCreateForm ? (
+        <Paper elevation={2} sx={{ p: 3, mb: 4 }}>
+          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
+            <Typography variant="h5" component="h2">
+              Your Tours
+            </Typography>
+            <Button variant="contained" color="primary" onClick={() => setShowCreateForm(true)}>
+              Create New Tour
+            </Button>
+          </Box>
+          <Divider sx={{ mb: 3 }} />
 
-      <Paper elevation={2} sx={{ p: 3 }}>
-        <Typography variant="h5" component="h2" gutterBottom>
-          Your Tours
-        </Typography>
-        <Divider sx={{ mb: 3 }} />
-
-        {tours.length === 0 ? (
-          <Alert severity="info">You don't have any tours yet. Create one above to get started.</Alert>
-        ) : (
-          <TableContainer>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Name</TableCell>
-                  <TableCell>Base Currency</TableCell>
-                  <TableCell>Travelers</TableCell>
-                  <TableCell>Expenses</TableCell>
-                  <TableCell>Created</TableCell>
-                  <TableCell>Actions</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {tours.map((tour) => (
-                  <TableRow key={tour.id}>
-                    <TableCell>
-                      {editingTourId === tour.id ? (
-                        <TextField size="small" value={editTourName} onChange={(e) => setEditTourName(e.target.value)} autoFocus variant="outlined" />
-                      ) : (
-                        <Typography
-                          sx={{
-                            cursor: "pointer",
-                            "&:hover": {
-                              textDecoration: "underline",
-                              color: "primary.main",
-                            },
-                          }}
-                          onClick={() => handleEditTour(tour.id)}
-                        >
-                          {tour.name}
-                        </Typography>
-                      )}
-                    </TableCell>
-                    <TableCell>{tour.baseCurrencyCode}</TableCell>
-                    <TableCell>{tour.travelers.length}</TableCell>
-                    <TableCell>{tour.expenses.length}</TableCell>
-                    <TableCell>{new Date(tour.createdAt).toLocaleDateString()}</TableCell>
-                    <TableCell>
-                      {editingTourId === tour.id ? (
-                        <Box>
-                          <IconButton color="success" onClick={() => handleSaveEdit(tour.id)} size="small">
-                            <CheckIcon />
-                          </IconButton>
-                          <IconButton color="default" onClick={handleCancelEdit} size="small">
-                            <CloseIcon />
-                          </IconButton>
-                        </Box>
-                      ) : (
-                        <Box>
-                          <IconButton color="primary" onClick={() => handleSelectTour(tour.id)} size="small" title="Select Tour">
-                            <SelectIcon />
-                          </IconButton>
-                          <IconButton color="warning" onClick={() => handleEditTour(tour.id)} size="small" title="Edit Tour">
-                            <EditIcon />
-                          </IconButton>
-                          <IconButton color="error" onClick={() => handleOpenDeleteDialog(tour.id)} size="small" title="Delete Tour">
-                            <DeleteIcon />
-                          </IconButton>
-                        </Box>
-                      )}
-                    </TableCell>
+          {userTours.length === 0 ? (
+            <Alert severity="info">You don't have any tours yet. Create one to get started.</Alert>
+          ) : (
+            <TableContainer>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Name</TableCell>
+                    <TableCell>Base Currency</TableCell>
+                    <TableCell>Travelers</TableCell>
+                    <TableCell>Expenses</TableCell>
+                    <TableCell>Created</TableCell>
+                    <TableCell>Actions</TableCell>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        )}
-      </Paper>
+                </TableHead>
+                <TableBody>
+                  {userTours.map((tour) => (
+                    <TableRow key={tour.id}>
+                      <TableCell>
+                        {editingTourId === tour.id ? (
+                          <TextField size="small" value={editTourName} onChange={(e) => setEditTourName(e.target.value)} autoFocus variant="outlined" />
+                        ) : (
+                          <Typography
+                            sx={{
+                              cursor: "pointer",
+                              "&:hover": {
+                                textDecoration: "underline",
+                                color: "primary.main",
+                              },
+                            }}
+                            onClick={() => handleEditTour(tour.id)}
+                          >
+                            {tour.name}
+                          </Typography>
+                        )}
+                      </TableCell>
+                      <TableCell>{tour.baseCurrencyCode}</TableCell>
+                      <TableCell>{tour.travelers.length}</TableCell>
+                      <TableCell>{tour.expenses.length}</TableCell>
+                      <TableCell>{new Date(tour.createdAt).toLocaleDateString()}</TableCell>
+                      <TableCell>
+                        {editingTourId === tour.id ? (
+                          <Box>
+                            <IconButton color="success" onClick={() => handleSaveEdit(tour.id)} size="small">
+                              <CheckIcon />
+                            </IconButton>
+                            <IconButton color="default" onClick={handleCancelEdit} size="small">
+                              <CloseIcon />
+                            </IconButton>
+                          </Box>
+                        ) : (
+                          <Box>
+                            <IconButton color="primary" onClick={() => handleSelectTour(tour.id)} size="small" title="Select Tour">
+                              <SelectIcon />
+                            </IconButton>
+                            <IconButton color="warning" onClick={() => handleEditTour(tour.id)} size="small" title="Edit Tour">
+                              <EditIcon />
+                            </IconButton>
+                            <IconButton color="error" onClick={() => handleOpenDeleteDialog(tour.id)} size="small" title="Delete Tour">
+                              <DeleteIcon />
+                            </IconButton>
+                          </Box>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+        </Paper>
+      ) : (
+        <CreateTourForm onSuccess={handleCreateTourSuccess} onCancel={() => setShowCreateForm(false)} />
+      )}
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteDialogOpen} onClose={handleCloseDeleteDialog}>

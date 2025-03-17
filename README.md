@@ -153,6 +153,18 @@ The application is configured as a Progressive Web App (PWA) using Vite PWA plug
 
 > **For existing installations**: If you've previously used `supabase-setup.sql` and `supabase-update.sql` files, you can continue using those, but the comprehensive file is recommended for new installations as it includes all the latest schema changes.
 
+> **Important Update for Multiple Tours per User**: If you're experiencing an error when creating multiple tours with the same email address, you need to run the following SQL in your Supabase SQL Editor to drop the unique constraint on the email field:
+>
+> ```sql
+> -- Drop the unique constraint on email in the tours table
+> DROP INDEX IF EXISTS idx_tours_email;
+>
+> -- Create a non-unique index for better query performance
+> CREATE INDEX IF NOT EXISTS idx_tours_email ON tours(email);
+> ```
+>
+> This will allow users to create multiple tours with the same email address.
+
 ### Database Structure
 
 The application uses the following tables:

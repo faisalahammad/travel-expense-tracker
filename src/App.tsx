@@ -1,8 +1,11 @@
 import { createTheme, CssBaseline, ThemeProvider } from "@mui/material";
 import { Navigate, Route, BrowserRouter as Router, Routes } from "react-router-dom";
 import Layout from "./components/Layout";
+import ProtectedRoute from "./components/ProtectedRoute";
 import { AppProvider } from "./context/AppContext";
+import { AuthProvider } from "./context/AuthContext";
 import "./index.css";
+import Auth from "./pages/Auth";
 import Currencies from "./pages/Currencies";
 import Expenses from "./pages/Expenses";
 import Home from "./pages/Home";
@@ -93,15 +96,22 @@ const AppRoutes: React.FC = () => {
   return (
     <Router>
       <Routes>
-        <Route path="/" element={<Layout />}>
-          <Route index element={<Home />} />
-          <Route path="tours" element={<Tours />} />
-          <Route path="travelers" element={<Travelers />} />
-          <Route path="currencies" element={<Currencies />} />
-          <Route path="expenses" element={<Expenses />} />
-          <Route path="settlements" element={<Settlements />} />
-          <Route path="planning" element={<Planning />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
+        {/* Public routes */}
+        <Route path="/auth" element={<Auth />} />
+
+        {/* Protected routes */}
+        <Route element={<ProtectedRoute redirectPath="/auth" />}>
+          <Route path="/" element={<Layout />}>
+            <Route index element={<Home />} />
+            <Route path="tours" element={<Tours />} />
+            <Route path="travelers" element={<Travelers />} />
+            <Route path="currencies" element={<Currencies />} />
+            <Route path="expenses" element={<Expenses />} />
+            <Route path="settlements" element={<Settlements />} />
+            <Route path="planning" element={<Planning />} />
+            <Route path="account" element={<Auth />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Route>
         </Route>
       </Routes>
     </Router>
@@ -112,9 +122,11 @@ function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <AppProvider>
-        <AppRoutes />
-      </AppProvider>
+      <AuthProvider>
+        <AppProvider>
+          <AppRoutes />
+        </AppProvider>
+      </AuthProvider>
     </ThemeProvider>
   );
 }

@@ -1,26 +1,21 @@
-import { Add as AddIcon, Settings as SettingsIcon } from "@mui/icons-material";
-import { Alert, Box, Button, Card, CardActions, CardContent, Divider, Grid, Paper, TextField, Typography } from "@mui/material";
-import React, { useState } from "react";
-import { Link } from "react-router-dom";
+import { Settings as SettingsIcon } from "@mui/icons-material";
+import { Alert, Box, Button, Card, CardActions, CardContent, Grid, Paper, Typography } from "@mui/material";
+import React from "react";
+import { Link, Navigate } from "react-router-dom";
 import { useAppContext } from "../context/AppContext";
+import { useAuth } from "../context/AuthContext";
 
 const Home: React.FC = () => {
-  const { state, createTour } = useAppContext();
+  const { authState } = useAuth();
+  const { state } = useAppContext();
   const { tours, activeTourId } = state;
 
-  const [newTourName, setNewTourName] = useState("");
-  const [newTourCurrency, setNewTourCurrency] = useState("USD");
+  // If not authenticated, redirect to auth page
+  if (!authState.isAuthenticated) {
+    return <Navigate to="/auth" replace />;
+  }
 
   const activeTour = activeTourId ? tours.find((tour) => tour.id === activeTourId) : null;
-
-  const handleCreateTour = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (newTourName.trim() && newTourCurrency.trim()) {
-      createTour(newTourName.trim(), newTourCurrency.trim());
-      setNewTourName("");
-      setNewTourCurrency("USD");
-    }
-  };
 
   return (
     <>
@@ -30,7 +25,7 @@ const Home: React.FC = () => {
 
       {tours.length === 0 ? (
         <Alert severity="info" sx={{ mb: 4 }}>
-          Welcome to Travel Expense Tracker! Get started by creating your first tour.
+          Welcome to Travel Expense Tracker! Get started by creating your first tour on the Tours page.
         </Alert>
       ) : (
         activeTour && (
@@ -104,31 +99,11 @@ const Home: React.FC = () => {
         )
       )}
 
-      <Grid container spacing={3}>
-        <Grid item xs={12}>
-          <Paper elevation={2} sx={{ p: 3, height: "100%" }}>
-            <Typography variant="h5" component="h2" gutterBottom>
-              Create New Tour
-            </Typography>
-            <Divider sx={{ mb: 3 }} />
-            <form onSubmit={handleCreateTour}>
-              <TextField fullWidth id="tourName" label="Tour Name" placeholder="e.g., Philippines Trip 2023" variant="outlined" value={newTourName} onChange={(e) => setNewTourName(e.target.value)} required margin="normal" />
-              <TextField fullWidth id="baseCurrency" label="Base Currency" placeholder="e.g., USD" variant="outlined" value={newTourCurrency} onChange={(e) => setNewTourCurrency(e.target.value)} required margin="normal" helperText="Enter the 3-letter currency code (e.g., USD, EUR, JPY)" />
-              <Button type="submit" variant="contained" color="primary" startIcon={<AddIcon />} sx={{ mt: 2 }}>
-                Create Tour
-              </Button>
-            </form>
-          </Paper>
-        </Grid>
-      </Grid>
-
-      {tours.length > 0 && (
-        <Box sx={{ mt: 4, textAlign: "center" }}>
-          <Button component={Link} to="/tours" variant="outlined" color="primary" startIcon={<SettingsIcon />}>
-            Manage All Tours
-          </Button>
-        </Box>
-      )}
+      <Box sx={{ mt: 4, textAlign: "center" }}>
+        <Button component={Link} to="/tours" variant="outlined" color="primary" startIcon={<SettingsIcon />}>
+          Manage Tours
+        </Button>
+      </Box>
     </>
   );
 };
