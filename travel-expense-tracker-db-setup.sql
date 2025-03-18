@@ -96,7 +96,7 @@ CREATE TABLE IF NOT EXISTS tours (
   updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
 
--- Create index on email for faster lookups (non-unique to allow multiple tours per email)
+-- Create non-unique index on email for faster lookups
 CREATE INDEX IF NOT EXISTS idx_tours_email ON tours(email);
 
 -- Create index on user_id for faster lookups

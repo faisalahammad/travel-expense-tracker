@@ -149,27 +149,48 @@ The application is configured as a Progressive Web App (PWA) using Vite PWA plug
 3. Go to the SQL Editor in your Supabase dashboard
 4. Run the SQL commands from the `travel-expense-tracker-db-setup.sql` file to create all necessary tables, functions, and initial data
 
-> **Note**: The `travel-expense-tracker-db-setup.sql` file contains all the necessary SQL commands to set up the complete database structure in one go. This is the recommended approach for new installations.
+> **Note**: The `travel-expense-tracker-db-setup.sql` file contains all the necessary SQL commands to set up the complete database structure in one go. This includes support for multiple tours per user, authentication system, and all other features.
 
-> **For existing installations**: If you've previously used `supabase-setup.sql` and `supabase-update.sql` files, you can continue using those, but the comprehensive file is recommended for new installations as it includes all the latest schema changes.
+> **Important**: The database schema supports multiple tours per user by default. There is no need to run any additional SQL commands for this functionality.
 
-> **Important Update for Multiple Tours per User**: If you're experiencing an error when creating multiple tours with the same email address, you need to run the following SQL in your Supabase SQL Editor to drop the unique constraint on the email field:
->
-> ```sql
-> -- Drop the unique constraint on email in the tours table
-> DROP INDEX IF EXISTS idx_tours_email;
->
-> -- Create a non-unique index for better query performance
-> CREATE INDEX IF NOT EXISTS idx_tours_email ON tours(email);
-> ```
->
-> This will allow users to create multiple tours with the same email address.
+### Authentication Features
+
+The application includes a robust authentication system with the following features:
+
+1. **User Registration**: Users can create accounts with email and PIN
+2. **Security Questions**: Each user sets up a security question for account recovery
+3. **PIN Recovery**: Users can reset their PIN using their security question
+4. **Persistent Login**: Users remain logged in for extended periods with secure session management
+5. **Failed Login Protection**: System tracks and limits failed login attempts
+6. **Tour-Level Security**: Each tour can optionally have its own PIN protection
 
 ### Database Structure
 
 The application uses the following tables:
 
-1. **tours**: Stores tour information
+1. **users**: Stores user account information
+
+   - `id`: UUID (primary key)
+   - `email`: Text
+   - `pin_hash`: Text
+   - `security_question_id`: Integer (foreign key to security_questions)
+   - `security_answer`: Text
+   - `created_at`: Timestamp
+   - `updated_at`: Timestamp
+
+2. **security_questions**: Stores available security questions
+
+   - `id`: Serial (primary key)
+   - `question`: Text
+
+3. **auth_attempts**: Tracks authentication attempts
+
+   - `id`: UUID (primary key)
+   - `email`: Text
+   - `attempt_time`: Timestamp
+   - `successful`: Boolean
+
+4. **tours**: Stores tour information
 
    - `id`: UUID (primary key)
    - `name`: Text
@@ -177,13 +198,13 @@ The application uses the following tables:
    - `created_at`: Timestamp
    - `updated_at`: Timestamp
 
-2. **travelers**: Stores traveler information
+5. **travelers**: Stores traveler information
 
    - `id`: UUID (primary key)
    - `tour_id`: UUID (foreign key to tours)
    - `name`: Text
 
-3. **currencies**: Stores currency information
+6. **currencies**: Stores currency information
 
    - `tour_id`: UUID (foreign key to tours)
    - `code`: Text
@@ -191,13 +212,13 @@ The application uses the following tables:
    - `exchange_rate`: Numeric
    - Primary key: (tour_id, code)
 
-4. **expense_categories**: Stores expense categories
+7. **expense_categories**: Stores expense categories
 
    - `id`: Text (primary key)
    - `name`: Text
    - `color`: Text
 
-5. **expenses**: Stores expense information
+8. **expenses**: Stores expense information
 
    - `id`: UUID (primary key)
    - `tour_id`: UUID (foreign key to tours)
@@ -211,7 +232,7 @@ The application uses the following tables:
    - `category_id`: Text (foreign key to expense_categories)
    - `created_at`: Timestamp
 
-6. **expense_splits**: Stores how expenses are split among travelers
+9. **expense_splits**: Stores how expenses are split among travelers
 
    - `expense_id`: UUID (foreign key to expenses)
    - `traveler_id`: UUID (foreign key to travelers)
@@ -219,31 +240,31 @@ The application uses the following tables:
    - `base_amount`: Numeric
    - Primary key: (expense_id, traveler_id)
 
-7. **payments**: Stores payment information
+10. **payments**: Stores payment information
 
-   - `id`: UUID (primary key)
-   - `tour_id`: UUID (foreign key to tours)
-   - `from_traveler_id`: UUID (foreign key to travelers)
-   - `to_traveler_id`: UUID (foreign key to travelers)
-   - `amount`: Numeric
-   - `currency_code`: Text
-   - `date`: Timestamp
-   - `description`: Text
-   - `created_at`: Timestamp
+    - `id`: UUID (primary key)
+    - `tour_id`: UUID (foreign key to tours)
+    - `from_traveler_id`: UUID (foreign key to travelers)
+    - `to_traveler_id`: UUID (foreign key to travelers)
+    - `amount`: Numeric
+    - `currency_code`: Text
+    - `date`: Timestamp
+    - `description`: Text
+    - `created_at`: Timestamp
 
-8. **planning_tasks**: Stores trip planning tasks
-   - `id`: UUID (primary key)
-   - `tour_id`: UUID (foreign key to tours)
-   - `title`: Text
-   - `cost`: Numeric (optional)
-   - `currency_code`: Text (optional)
-   - `location`: Text (optional)
-   - `date`: Timestamp
-   - `priority`: Text (LOW, MEDIUM, HIGH)
-   - `travelers`: Text[] (array of traveler IDs)
-   - `assigned_to`: Text[] (array of traveler IDs)
-   - `completed`: Boolean
-   - `created_at`: Timestamp
+11. **planning_tasks**: Stores trip planning tasks
+    - `id`: UUID (primary key)
+    - `tour_id`: UUID (foreign key to tours)
+    - `title`: Text
+    - `cost`: Numeric (optional)
+    - `currency_code`: Text (optional)
+    - `location`: Text (optional)
+    - `date`: Timestamp
+    - `priority`: Text (LOW, MEDIUM, HIGH)
+    - `travelers`: Text[] (array of traveler IDs)
+    - `assigned_to`: Text[] (array of traveler IDs)
+    - `completed`: Boolean
+    - `created_at`: Timestamp
 
 ## Running the Application
 
